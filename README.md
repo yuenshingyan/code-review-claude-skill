@@ -22,7 +22,7 @@ A Claude Code skill that generates interactive visual code reviews as self-conta
 Clone this repo directly into your Claude Code skills directory:
 
 ```bash
-git clone https://github.com/hindy1234/code-review-claude-skill ~/.claude/skills/code-review
+git clone https://github.com/yuenshingyan/code-review-claude-skill ~/.claude/skills/code-review
 ```
 
 That's it. Claude Code auto-discovers skills in `~/.claude/skills/`.

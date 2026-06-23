@@ -25,7 +25,7 @@ The skill has two parts:
 
 1. Clone the repo into your skills directory:
    ```bash
-   git clone https://github.com/<your-username>/code-review-claude-skill ~/.claude/skills/code-review
+   git clone https://github.com/yuenshingyan/code-review-claude-skill ~/.claude/skills/code-review
    ```
 2. Make your changes.
 3. Open any git project in Claude Code and run `/code-review`.
