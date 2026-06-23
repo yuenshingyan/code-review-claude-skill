@@ -1,0 +1,1858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Code Review</title><!-- v3 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0e1116; color: #e2e8f0;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 13px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  padding: 32px 16px;
+  scrollbar-gutter: stable;
+  overflow-y: scroll;
+}
+.container { max-width: 1400px; margin: 0 auto; }
+h1 { font-size: 20px; font-weight: 600; text-align: center; margin-bottom: 4px; }
+.subtitle { color: #4a5568; font-size: 12px; text-align: center; margin: -8px 0 8px; }
+.stats-bar {
+  color: #8892a4; font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+  text-align: center; padding-bottom: 12px; margin-bottom: 12px;
+  border-bottom: none;
+}
+.stat-add { color: #4ade80; }
+.stat-del { color: #f87171; }
+
+/* Tab bar */
+.tab-bar {
+  display: flex; gap: 2px; border-bottom: none;
+  margin-bottom: 16px; position: sticky; top: 0;
+  background: #0e1116; z-index: 10; padding: 8px 0 6px;
+  flex-wrap: wrap; align-items: center;
+}
+.tab {
+  background: none; border: none;
+  color: #8892a4; font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 13px; padding: 6px 12px; margin-bottom: 4px; cursor: pointer;
+  border-radius: 0;
+  transition: color 100ms ease-out;
+}
+.tab:hover { color: #e2e8f0; }
+.tab.active { color: #e2e8f0; border-bottom: 2px solid #4a9eff; border-radius: 0; }
+.tab-count { font-size: 11px; color: #4a5568; margin-left: 4px; }
+.tab.active .tab-count { color: #8892a4; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Tab bar right controls */
+.tab-bar-right {
+  display: flex; align-items: center; gap: 6px; margin-left: auto;
+}
+.expand-toggle, .next-unreviewed, .export-notes {
+  background: none; border: none; border-radius: 3px;
+  color: #8892a4; font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  padding: 4px 8px; cursor: pointer;
+  transition: color 100ms ease-out, background 100ms ease-out;
+  white-space: nowrap;
+}
+.expand-toggle:hover, .next-unreviewed:hover, .export-notes:hover {
+  color: #e2e8f0; background: rgba(255, 255, 255, 0.05);
+}
+.next-unreviewed { color: #4a9eff; }
+.next-unreviewed:hover { color: #7abdff; }
+.review-progress {
+  color: #4a5568; font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; padding: 4px 0; white-space: nowrap;
+}
+
+
+/* Summary table */
+.summary-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.summary-table th {
+  text-align: left; color: #4a5568; font-weight: 600; font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 8px;
+  border-bottom: 1px solid #272d38;
+}
+.summary-table th.churn-col { text-align: right; }
+.summary-table td { padding: 6px 8px; border-bottom: 1px solid #1e242d; }
+.summary-table tr:hover { background: rgba(255,255,255,0.02); }
+.summary-table a { color: #4a9eff; text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+.summary-table a:hover { text-decoration: underline; }
+.summary-table .desc-col { color: #8892a4; }
+.summary-table .tab-col { color: #4a5568; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+.summary-table .churn-td { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 11px; white-space: nowrap; }
+.summary-table .churn-add { color: #4ade80; }
+.summary-table .churn-del { color: #f87171; }
+
+/* Status badges */
+.badge-status {
+  display: inline-block; font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; padding: 1px 5px; border-radius: 2px;
+  vertical-align: middle; line-height: 1.6; flex-shrink: 0;
+  width: 62px; text-align: center; box-sizing: border-box;
+}
+.badge-status.new { background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); }
+.badge-status.deleted { background: rgba(248, 113, 113, 0.15); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); }
+.badge-status.renamed { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
+.badge-status.modified { background: rgba(74, 158, 255, 0.1); color: #4a9eff; border: 1px solid rgba(74, 158, 255, 0.2); }
+
+/* Commits timeline */
+.commits-timeline { list-style: none; padding: 8px 0 8px 24px; position: relative; }
+.commits-timeline::before {
+  content: ''; position: absolute; left: 7px; top: 16px; bottom: 16px;
+  width: 1px; background: #272d38;
+}
+.commit-node {
+  position: relative; padding: 0 0 20px 0;
+}
+.commit-node:last-child { padding-bottom: 0; }
+.commit-dot {
+  position: absolute; left: -21px; top: 4px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #1e2430; border: 2px solid #4a9eff;
+  z-index: 1;
+}
+.commit-node:first-child .commit-dot { background: #4a9eff; }
+.commit-header {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.commit-hash {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  color: #4a9eff; flex-shrink: 0;
+}
+.commit-msg { color: #e2e8f0; font-size: 12px; }
+.commit-meta { color: #4a5568; font-size: 11px; white-space: nowrap; flex-shrink: 0; }
+.commit-files {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; padding-left: 0;
+}
+.commit-file-pill {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  color: #8892a4; background: rgba(255,255,255,0.04);
+  border: 1px solid #1e2430; border-radius: 2px;
+  padding: 1px 6px; cursor: pointer; text-decoration: none;
+  transition: color 100ms ease-out, border-color 100ms ease-out;
+}
+.commit-file-pill:hover { color: #4a9eff; border-color: #4a9eff; }
+
+/* Commit pills on sections */
+.commit-pills { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
+.commit-pill {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  color: #4a9eff; background: rgba(74, 158, 255, 0.08);
+  border: 1px solid rgba(74, 158, 255, 0.2); border-radius: 2px;
+  padding: 0 4px; line-height: 1.6;
+}
+
+/* Skipped files list (tab panel) */
+.skipped-list { list-style: none; padding: 0; }
+.skipped-list li {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 6px 0; font-size: 12px;
+  border-bottom: 1px solid #1e242d;
+}
+.skipped-list li:last-child { border-bottom: none; }
+.skipped-file { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #4a5568; }
+.skipped-reason { color: #8892a4; font-size: 11px; }
+
+/* Renamed subtitle */
+.rename-from {
+  color: #4a5568; font-size: 11px; margin: 4px 0 2px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.rename-from code {
+  color: #8892a4; background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 2px;
+  text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.2);
+}
+
+/* Renamed old path (unused - kept for compat) */
+.old-file {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  color: #4a5568; text-decoration: line-through; margin-right: 4px;
+}
+.rename-arrow { color: #4a5568; margin: 0 4px; font-size: 11px; }
+
+/* Section styling */
+section.change { scroll-margin-top: 60px; margin-bottom: 12px; border-left: 2px solid #1e2430; border-radius: 0; background: #12161d; }
+section.change[data-status="approved"] { border-left-color: #4ade80; }
+section.change[data-status="rejected"] { border-left-color: #f87171; }
+section.change[data-status="concern"] { border-left-color: #fbbf24; }
+details summary {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 8px 12px; font-size: 13px; list-style: none;
+  transition: background 100ms ease-out;
+  overflow: hidden;
+}
+details summary:hover { background: rgba(255,255,255,0.03); }
+details summary::-webkit-details-marker { display: none; }
+details summary::before {
+  content: '\25B8'; color: #4a5568; font-size: 11px; transition: transform 100ms ease-out, color 100ms ease-out;
+  flex-shrink: 0;
+}
+details summary:hover::before { color: #8892a4; }
+details[open] summary::before { transform: rotate(90deg); }
+details > :not(summary) { padding: 0 12px; }
+.file-name { color: #4a9eff; text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+
+.desc { color: #8892a4; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
+.badge.complexity {
+  background: rgba(255, 255, 255, 0.05); color: #8892a4;
+  border: 1px solid #1e2430; border-radius: 2px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  padding: 1px 6px; margin-left: 8px; vertical-align: middle;
+}
+.badge.breaking {
+  background: rgba(248, 113, 113, 0.15); color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.3); border-radius: 2px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600;
+  padding: 1px 6px; margin-left: 8px; vertical-align: middle;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+
+/* Note indicator icon */
+.note-indicator {
+  display: none; flex-shrink: 0; color: #fbbf24; line-height: 1;
+}
+.note-indicator.has-note { display: flex; align-items: center; }
+
+/* Copy section button */
+.copy-section-btn {
+  background: none; border: none; color: #4a5568; cursor: pointer;
+  padding: 2px; border-radius: 3px; line-height: 1; flex-shrink: 0;
+  transition: color 100ms ease-out, background 100ms ease-out;
+}
+.copy-section-btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.08); }
+.copy-section-btn.copied { color: #4ade80; }
+
+/* Status toggle group */
+.section-right {
+  display: flex; align-items: center; gap: 4px; margin-left: auto; flex-shrink: 0; white-space: nowrap;
+}
+.sr-locs { min-width: 70px; text-align: right; }
+.sr-breaking { min-width: 72px; }
+.sr-commits { min-width: 58px; }
+.status-group {
+  display: flex; align-items: center; gap: 1px; background: rgba(255,255,255,0.03);
+  border: 1px solid #1e2430; border-radius: 3px; padding: 1px; flex-shrink: 0;
+}
+.status-opt {
+  background: none; border: none; cursor: pointer; padding: 2px 5px;
+  font-size: 12px; line-height: 1; color: #333a47; border-radius: 2px;
+  transition: all 80ms ease-out; user-select: none;
+}
+.status-opt:hover { color: #8892a4; background: rgba(255,255,255,0.05); }
+.status-opt.active { color: #4a5568; }
+.status-opt.active[data-val="approved"] { color: #4ade80; background: rgba(74,222,128,0.12); }
+.status-opt.active[data-val="rejected"] { color: #f87171; background: rgba(248,113,113,0.12); }
+.status-opt.active[data-val="concern"] { color: #fbbf24; background: rgba(251,191,36,0.12); }
+
+/* Context */
+p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.5; }
+.breaking-detail {
+  color: #f87171; font-size: 12px; line-height: 1.5;
+  background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 3px; padding: 8px 12px; margin: 4px 12px 12px;
+}
+
+/* Side-by-side diffs */
+.diff-columns {
+  display: grid; grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr auto auto; gap: 0 12px; min-width: 0;
+  margin: 12px 0;
+}
+.diff-col {
+  display: grid; grid-template-rows: subgrid; grid-row: span 4;
+  min-width: 0;
+}
+@media (max-width: 900px) { .diff-columns { grid-template-columns: 1fr; } }
+.diff-col h5 { color: #4a5568; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.diff-full { margin: 12px 0; }
+
+/* Code blocks */
+.cb {
+  background: #1a1f28; border: 1px solid #1e2430; border-radius: 0;
+  padding: 10px 12px; overflow-x: auto; margin-bottom: 8px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.55;
+}
+.cb > div { white-space: pre; position: relative; padding-left: 40px; min-height: 1.55em; }
+.cb > div::before { content: attr(data-line); position: absolute; left: 0; width: 32px; text-align: right; color: #4a5568; font-size: 11px; user-select: none; }
+.cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 50px; }
+.cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 50px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); }
+.cb .added::before, .cb .removed::before { left: 12px; }
+
+/* Key identifiers */
+.key-ids { margin: 8px 0; }
+.key-ids h5 { color: #4a5568; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.key-ids ul { list-style: none; padding: 0; }
+.key-ids li { font-size: 12px; color: #8892a4; padding: 2px 0; }
+.key-ids code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #e2e8f0; background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 2px; }
+
+/* Explanations */
+.explanation { font-size: 12px; color: #8892a4; line-height: 1.55; margin: 6px 0; }
+.explanation strong { color: #e2e8f0; font-weight: 600; }
+h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px 0 4px; }
+.why { color: #8892a4; font-style: italic; font-size: 12px; margin: 4px 0 12px; line-height: 1.55; }
+.note { color: #8892a4; font-size: 11px; margin: 8px 0; padding: 6px 10px; background: rgba(255,255,255,0.02); border: 1px solid #1e242d; border-radius: 3px; }
+.note strong { color: #fbbf24; }
+
+/* Reviewer note */
+.reviewer-note {
+  display: block; width: 100%; box-sizing: border-box;
+  background: #1a1f28; border: 1px solid #3a4150; border-radius: 3px;
+  color: #e2e8f0; font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+  padding: 8px 10px; margin: 8px 0 4px 12px; resize: vertical; min-height: 28px;
+}
+.reviewer-note::placeholder { color: #4a5568; }
+.reviewer-note:focus { outline: 1px solid #4a9eff; outline-offset: -1px; }
+
+/* Keyboard bar */
+.kbd-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: #1a1f28; border-top: 1px solid #272d38;
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  padding: 4px 16px; height: 28px;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 11px;
+}
+.kbd-bar .kbd-group {
+  display: flex; align-items: center; gap: 4px; color: #4a5568;
+}
+.kbd-bar kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px;
+  background: rgba(255,255,255,0.06); border: 1px solid #3a4150;
+  border-radius: 3px; padding: 0 4px;
+  color: #8892a4; font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  line-height: 1;
+}
+.kbd-bar .kbd-label { color: #4a5568; }
+.kbd-bar .kbd-sep {
+  width: 1px; height: 12px; background: #272d38; flex-shrink: 0;
+}
+
+/* Toast notification */
+.toast {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: #1a1f28; border: 1px solid #4a9eff; border-radius: 4px;
+  padding: 8px 16px; font-size: 12px; color: #e2e8f0; z-index: 200;
+  opacity: 0; transition: opacity 200ms ease-out;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+/* Print styles */
+@media print {
+  body { background: #fff; color: #1a1a2e; padding: 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .container { max-width: 100%; }
+  h1 { color: #1a1a2e; }
+  .subtitle { color: #666; }
+  .stats-bar { color: #666; border-bottom-color: #ddd; }
+  .tab-bar, .kbd-bar, .toast, .next-unreviewed, .export-notes, .expand-toggle { display: none !important; }
+  .tab-panel { display: block !important; }
+  .tab-panel[data-tab="summary"] { margin-bottom: 24px; }
+  section.change { border-left-color: #ddd; background: #fafafa; break-inside: avoid; }
+  details { display: block; }
+  details > * { display: block; }
+  details summary::before { content: ''; }
+  .file-name { color: #0055cc; }
+  .desc { color: #666; }
+  .cb { background: #f5f5f5; border-color: #ddd; }
+  .cb .added { background: rgba(34,139,34,0.1); border-left-color: #228b22; }
+  .cb .removed { background: rgba(200,50,50,0.1); border-left-color: #c83232; }
+  .summary-table td, .summary-table th { border-bottom-color: #ddd; }
+  .badge-status.new { background: rgba(34,139,34,0.1); color: #228b22; border-color: #228b22; }
+  .badge-status.deleted { background: rgba(200,50,50,0.1); color: #c83232; border-color: #c83232; }
+  .badge-status.renamed { background: rgba(180,130,0,0.1); color: #8a6d00; border-color: #8a6d00; }
+  .badge-status.modified { background: rgba(0,85,204,0.1); color: #0055cc; border-color: #0055cc; }
+  p.context, .explanation, .why { color: #555; }
+  .key-ids li { color: #555; }
+  .key-ids code { color: #1a1a2e; background: #eee; }
+  h4.why-heading { color: #1a1a2e; }
+  .status-group { display: none; }
+  .reviewer-note { border-color: #ccc; background: #fafafa; color: #1a1a2e; }
+  .reviewer-note:empty { display: none; }
+  .copy-section-btn { display: none; }
+  .tab-panel[data-tab="commits"], .tab-panel[data-tab="skipped"] { display: block !important; }
+  .commit-hash { color: #0055cc; }
+  .commit-msg { color: #1a1a2e; }
+  .commit-meta { color: #666; }
+  .commits-timeline::before { background: #ccc; }
+  .commit-dot { border-color: #0055cc; background: #fff; }
+  .commit-node:first-child .commit-dot { background: #0055cc; }
+  .commit-file-pill { background: #f0f0f0; border-color: #ddd; color: #555; }
+  .breaking-detail { background: rgba(200,50,50,0.08); border-color: rgba(200,50,50,0.3); color: #c83232; }
+  .badge.breaking { background: rgba(200,50,50,0.1); color: #c83232; border-color: #c83232; }
+}
+
+
+/* Breadcrumb file paths */
+.bc-path { font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+.bc-path .bc-seg { color: #4a5568; }
+.bc-path .bc-sep { color: #333a47; margin: 0 2px; }
+.bc-path .bc-file { color: #4a9eff; }
+a.bc-path { text-decoration: none; }
+
+/* Scroll breadcrumb bar */
+.breadcrumb-bar {
+  position: sticky; top: 38px; z-index: 9;
+  background: #12161d; border-bottom: 1px solid #1e2430;
+  padding: 4px 16px; font-size: 11px; min-height: 24px;
+  font-family: 'IBM Plex Mono', monospace;
+  display: none; align-items: center; gap: 6px;
+  color: #4a5568;
+}
+.breadcrumb-bar.visible { display: flex; }
+.breadcrumb-bar .bb-tab { color: #4a9eff; }
+.breadcrumb-bar .bb-sep { color: #333a47; margin: 0 2px; }
+.breadcrumb-bar .bb-file { color: #8892a4; }
+.breadcrumb-bar .bb-desc { color: #4a5568; }
+
+/* Command palette */
+.cmd-palette-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.5); display: none;
+  align-items: flex-start; justify-content: center;
+  padding-top: 15vh;
+}
+.cmd-palette-overlay.open { display: flex; }
+.cmd-palette {
+  width: 560px; max-width: 90vw; background: #1a1f28;
+  border: 1px solid #272d38; border-radius: 4px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.cmd-palette-input {
+  width: 100%; background: none; border: none;
+  border-bottom: 1px solid #1e2430;
+  color: #e2e8f0; font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px; padding: 12px 16px; outline: none;
+}
+.cmd-palette-input::placeholder { color: #4a5568; }
+.cmd-palette-results {
+  max-height: 320px; overflow-y: auto; padding: 4px 0;
+}
+.cmd-palette-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 16px; cursor: pointer; font-size: 12px;
+}
+.cmd-palette-item:hover, .cmd-palette-item.selected {
+  background: rgba(74, 158, 255, 0.1);
+}
+.cmd-palette-item .cpi-file { font-family: 'IBM Plex Mono', monospace; color: #e2e8f0; font-size: 12px; }
+.cmd-palette-item .cpi-desc { color: #4a5568; font-size: 11px; margin-left: auto; }
+.cmd-palette-item .cpi-tab { font-size: 9px; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px; }
+
+
+/* Related changes */
+.related-changes {
+  display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0;
+}
+.related-pill {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  color: #4a9eff; background: rgba(74, 158, 255, 0.06);
+  border: 1px solid rgba(74, 158, 255, 0.15); border-radius: 2px;
+  padding: 1px 6px; cursor: pointer; text-decoration: none;
+  transition: color 80ms ease-out, border-color 80ms ease-out, background 80ms ease-out;
+}
+.related-pill:hover { color: #7abdff; border-color: rgba(74, 158, 255, 0.4); background: rgba(74, 158, 255, 0.1); }
+.related-label { color: #4a5568; font-size: 10px; font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.3px; margin-right: 4px; align-self: center; }
+
+/* Review checklist pills */
+.review-checklist {
+  margin: 8px 0; padding: 0 0 0 12px; list-style: none;
+  display: flex; flex-wrap: wrap; gap: 4px;
+}
+.review-checklist li {
+  display: flex; align-items: center;
+}
+.chk-pill {
+  font-size: 10px; font-family: 'IBM Plex Mono', monospace;
+  color: #333a47; background: rgba(255,255,255,0.02);
+  border: 1px solid #1e2430; border-radius: 2px;
+  padding: 2px 8px; cursor: pointer; user-select: none;
+  transition: all 80ms ease-out; letter-spacing: 0.3px;
+}
+.chk-pill:hover { color: #8892a4; border-color: #3a4150; }
+.chk-pill.checked { color: #4ade80; border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.08); }
+.review-checklist input { display: none; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: #3a4150; border-radius: 3px; }
+::-webkit-scrollbar-track { background: #0e1116; }
+</style>
+</head>
+<body>
+<div class="container" id="cr-root"></div>
+<div class="kbd-bar">
+  <span class="kbd-group"><kbd>j</kbd><kbd>k</kbd> <span class="kbd-label">navigate</span></span>
+  <span class="kbd-sep"></span>
+  <span class="kbd-group"><kbd>e</kbd> <span class="kbd-label">expand</span></span>
+  <span class="kbd-sep"></span>
+  <span class="kbd-group"><kbd>x</kbd> <span class="kbd-label">status</span></span>
+  <span class="kbd-sep"></span>
+  <span class="kbd-group"><kbd>n</kbd> <span class="kbd-label">next unreviewed</span></span>
+  <span class="kbd-sep"></span>
+  <span class="kbd-group"><kbd>/</kbd> <span class="kbd-label">palette</span></span>
+  <span class="kbd-sep"></span>
+  <span class="kbd-group"><kbd>⌘K</kbd> <span class="kbd-label">palette</span></span>
+</div>
+<div class="cmd-palette-overlay" id="cmd-palette-overlay">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" id="cmd-palette-input" type="text" placeholder="Jump to section..." autocomplete="off">
+    <div class="cmd-palette-results" id="cmd-palette-results"></div>
+  </div>
+</div>
+<div class="breadcrumb-bar" id="breadcrumb-bar"></div>
+<div class="toast" id="toast"></div>
+
+<script id="review-data" type="application/json">{
+  "title": "Code Review",
+  "projectName": "acme-api",
+  "date": "2026-06-23",
+  "scope": "main..HEAD (5 commits)",
+  "stats": { "files": 8, "added": 247, "deleted": 89 },
+  "commits": [
+    {
+      "hash": "a1b2c3d",
+      "message": "Add rate limiting middleware",
+      "author": "Alex Chen",
+      "date": "2026-06-22"
+    },
+    {
+      "hash": "b2c3d4e",
+      "message": "Fix panic on empty auth header",
+      "author": "Sarah Kim",
+      "date": "2026-06-22"
+    },
+    {
+      "hash": "c3d4e5f",
+      "message": "Extract validation into shared module",
+      "author": "Alex Chen",
+      "date": "2026-06-21"
+    },
+    {
+      "hash": "d4e5f6g",
+      "message": "Rename handlers to controllers",
+      "author": "Alex Chen",
+      "date": "2026-06-21"
+    },
+    {
+      "hash": "e5f6g7h",
+      "message": "Update dependencies and CI config",
+      "author": "Sarah Kim",
+      "date": "2026-06-20"
+    }
+  ],
+  "skipped": [
+    {
+      "file": "Cargo.lock",
+      "reason": "Auto-generated lock file (+1204 lines)"
+    },
+    {
+      "file": "src/generated/openapi.rs",
+      "reason": "Generated OpenAPI client"
+    }
+  ],
+  "summary": [
+    {
+      "id": "src-middleware-rate_limit-rs",
+      "file": "src/middleware/rate_limit.rs",
+      "tab": "features",
+      "desc": "Add rate limiting middleware with sliding window",
+      "status": "new",
+      "added": 68,
+      "removed": 0
+    },
+    {
+      "id": "src-middleware-mod-rs",
+      "file": "src/middleware/mod.rs",
+      "tab": "features",
+      "desc": "Register rate limiter in middleware stack",
+      "status": "modified",
+      "added": 8,
+      "removed": 1
+    },
+    {
+      "id": "src-auth-extract-rs",
+      "file": "src/auth/extract.rs",
+      "tab": "fixes",
+      "desc": "Guard against empty Authorization header",
+      "status": "modified",
+      "added": 12,
+      "removed": 3
+    },
+    {
+      "id": "src-validation-mod-rs",
+      "file": "src/validation/mod.rs",
+      "tab": "refactors",
+      "desc": "Move validation to shared module",
+      "status": "renamed",
+      "added": 4,
+      "removed": 2
+    },
+    {
+      "id": "src-controllers-users-rs",
+      "file": "src/controllers/users.rs",
+      "tab": "refactors",
+      "desc": "Rename handlers to controllers",
+      "status": "renamed",
+      "added": 2,
+      "removed": 2
+    },
+    {
+      "id": "src-main-rs",
+      "file": "src/main.rs",
+      "tab": "chores",
+      "desc": "Wire up rate limiter and update module paths",
+      "status": "modified",
+      "added": 6,
+      "removed": 4
+    }
+  ],
+  "sections": {
+    "features": [
+      {
+        "id": "src-middleware-rate_limit-rs",
+        "file": "src/middleware/rate_limit.rs",
+        "status": "new",
+        "desc": "Add rate limiting middleware with sliding window",
+        "complexity": { "added": 68, "removed": 0 },
+        "commits": ["a1b2c3d"],
+        "related": [
+          { "id": "src-main-rs", "file": "src/main.rs", "tab": "chores" }
+        ],
+        "breaking": false,
+        "context": "Introduces a token-bucket rate limiter backed by an in-memory <code>DashMap</code>. Each client IP gets a sliding window of <code>max_requests</code> per <code>window_secs</code>. Exceeding the limit returns <code>429 Too Many Requests</code> with a <code>Retry-After</code> header.",
+        "before": null,
+        "after": {
+          "code": [
+            { "line": 1, "text": "use axum::{extract::ConnectInfo, middleware::Next, response::Response};" },
+            { "line": 2, "text": "use dashmap::DashMap;" },
+            { "line": 3, "text": "use std::{net::SocketAddr, sync::Arc, time::Instant};" },
+            { "line": 4, "text": "" },
+            { "line": 5, "text": "#[derive(Clone)]", "type": "added" },
+            { "line": 6, "text": "pub struct RateLimiter {", "type": "added" },
+            { "line": 7, "text": "    buckets: Arc<DashMap<String, Vec<Instant>>>," , "type": "added" },
+            { "line": 8, "text": "    max_requests: usize,", "type": "added" },
+            { "line": 9, "text": "    window_secs: u64,", "type": "added" },
+            { "line": 10, "text": "}", "type": "added" },
+            { "line": 11, "text": "" },
+            { "line": 12, "text": "impl RateLimiter {", "type": "added" },
+            { "line": 13, "text": "    pub fn new(max_requests: usize, window_secs: u64) -> Self {", "type": "added" },
+            { "line": 14, "text": "        Self {", "type": "added" },
+            { "line": 15, "text": "            buckets: Arc::new(DashMap::new()),", "type": "added" },
+            { "line": 16, "text": "            max_requests,", "type": "added" },
+            { "line": 17, "text": "            window_secs,", "type": "added" },
+            { "line": 18, "text": "        }", "type": "added" },
+            { "line": 19, "text": "    }", "type": "added" },
+            { "line": 20, "text": "" },
+            { "line": 21, "text": "    pub async fn check(", "type": "added" },
+            { "line": 22, "text": "        &self,", "type": "added" },
+            { "line": 23, "text": "        ConnectInfo(addr): ConnectInfo<SocketAddr>,", "type": "added" },
+            { "line": 24, "text": "        req: axum::http::Request<axum::body::Body>,", "type": "added" },
+            { "line": 25, "text": "        next: Next,", "type": "added" },
+            { "line": 26, "text": "    ) -> Response {", "type": "added" },
+            { "line": 27, "text": "        let key = addr.ip().to_string();", "type": "added" },
+            { "line": 28, "text": "        let now = Instant::now();", "type": "added" },
+            { "line": 29, "text": "        let cutoff = now - std::time::Duration::from_secs(self.window_secs);", "type": "added" },
+            { "line": 30, "text": "" },
+            { "line": 31, "text": "        let mut entry = self.buckets.entry(key).or_default();", "type": "added" },
+            { "line": 32, "text": "        entry.retain(|t| *t > cutoff);", "type": "added" },
+            { "line": 33, "text": "" },
+            { "line": 34, "text": "        if entry.len() >= self.max_requests {", "type": "added" },
+            { "line": 35, "text": "            return too_many_requests(self.window_secs);", "type": "added" },
+            { "line": 36, "text": "        }", "type": "added" },
+            { "line": 37, "text": "        entry.push(now);", "type": "added" },
+            { "line": 38, "text": "        drop(entry);", "type": "added" },
+            { "line": 39, "text": "" },
+            { "line": 40, "text": "        next.run(req).await", "type": "added" },
+            { "line": 41, "text": "    }", "type": "added" },
+            { "line": 42, "text": "}", "type": "added" }
+          ],
+          "identifiers": [
+            { "name": "RateLimiter", "desc": "Shared rate-limiting state holding per-IP sliding windows" },
+            { "name": "buckets", "desc": "DashMap of IP string to Vec<Instant> tracking recent requests" },
+            { "name": "check()", "desc": "Axum middleware function that enforces the rate limit per request" },
+            { "name": "too_many_requests()", "desc": "Helper that builds a 429 response with Retry-After header" }
+          ],
+          "explanation": "The full new file. <strong>RateLimiter</strong> wraps a <code>DashMap</code> for lock-free concurrent access. The <code>check</code> method prunes expired timestamps, then either rejects with 429 or forwards the request."
+        },
+        "why": "Public API endpoints were being hit without any throttling, making the service vulnerable to abuse and accidental DDoS from misbehaving clients. A sliding-window approach gives smoother rate enforcement than fixed-window counters.",
+        "note": "<strong>Note:</strong> The in-memory store means rate limits reset on deploy. Consider migrating to Redis for multi-instance deployments."
+      },
+      {
+        "id": "src-middleware-mod-rs",
+        "file": "src/middleware/mod.rs",
+        "status": "modified",
+        "desc": "Register rate limiter in middleware stack",
+        "complexity": { "added": 8, "removed": 1 },
+        "commits": ["a1b2c3d"],
+        "related": [
+          { "id": "src-middleware-rate_limit-rs", "file": "src/middleware/rate_limit.rs", "tab": "features" }
+        ],
+        "breaking": false,
+        "context": "Adds the <code>rate_limit</code> submodule and re-exports <code>RateLimiter</code> from the middleware barrel file so it can be imported as <code>crate::middleware::RateLimiter</code>.",
+        "before": {
+          "code": [
+            { "line": 1, "text": "pub mod auth;" },
+            { "line": 2, "text": "pub mod cors;" },
+            { "line": 3, "text": "pub mod logging;" },
+            { "line": 4, "text": "" },
+            { "line": 5, "text": "pub use auth::AuthLayer;", "type": "removed" },
+            { "line": 6, "text": "pub use cors::CorsLayer;" },
+            { "line": 7, "text": "pub use logging::RequestLogger;" }
+          ],
+          "identifiers": [
+            { "name": "mod auth", "desc": "Authentication middleware module" },
+            { "name": "mod cors", "desc": "CORS configuration middleware" },
+            { "name": "mod logging", "desc": "Request/response logging middleware" }
+          ],
+          "explanation": "Before: three middleware modules exported. The <code>auth</code> re-export existed but <code>rate_limit</code> was missing entirely."
+        },
+        "after": {
+          "code": [
+            { "line": 1, "text": "pub mod auth;" },
+            { "line": 2, "text": "pub mod cors;" },
+            { "line": 3, "text": "pub mod logging;" },
+            { "line": 4, "text": "pub mod rate_limit;", "type": "added" },
+            { "line": 5, "text": "" },
+            { "line": 6, "text": "pub use auth::AuthLayer;" },
+            { "line": 7, "text": "pub use cors::CorsLayer;" },
+            { "line": 8, "text": "pub use logging::RequestLogger;" },
+            { "line": 9, "text": "pub use rate_limit::RateLimiter;", "type": "added" }
+          ],
+          "identifiers": [
+            { "name": "mod rate_limit", "desc": "Newly added rate limiting submodule" },
+            { "name": "RateLimiter", "desc": "Re-exported rate limiter struct for ergonomic imports" }
+          ],
+          "explanation": "After: <code>rate_limit</code> module is declared and <code>RateLimiter</code> is re-exported. Also restored the <code>AuthLayer</code> re-export that was present but shown as removed in the diff context."
+        },
+        "why": "Without registering the module here, the rate limiter would not be accessible from <code>src/main.rs</code> or any other part of the application."
+      }
+    ],
+    "fixes": [
+      {
+        "id": "src-auth-extract-rs",
+        "file": "src/auth/extract.rs",
+        "status": "modified",
+        "desc": "Guard against empty Authorization header",
+        "complexity": { "added": 12, "removed": 3 },
+        "commits": ["b2c3d4e"],
+        "related": [],
+        "breaking": false,
+        "context": "The <code>extract_bearer_token</code> function previously called <code>.split_once(' ').unwrap()</code> on the Authorization header value, which panics when the header is present but empty (e.g., <code>Authorization: </code>). This was reported as a production crash in issue #142.",
+        "before": {
+          "code": [
+            { "line": 18, "text": "pub fn extract_bearer_token(headers: &HeaderMap) -> Result<&str, AuthError> {" },
+            { "line": 19, "text": "    let header = headers" },
+            { "line": 20, "text": "        .get(AUTHORIZATION)" },
+            { "line": 21, "text": "        .ok_or(AuthError::MissingHeader)?;" },
+            { "line": 22, "text": "" },
+            { "line": 23, "text": "    let value = header.to_str().map_err(|_| AuthError::InvalidHeader)?;", "type": "removed" },
+            { "line": 24, "text": "    let (scheme, token) = value.split_once(' ').unwrap();", "type": "removed" },
+            { "line": 25, "text": "    if scheme != \"Bearer\" { return Err(AuthError::InvalidScheme); }", "type": "removed" },
+            { "line": 26, "text": "" },
+            { "line": 27, "text": "    Ok(token)" },
+            { "line": 28, "text": "}" }
+          ],
+          "identifiers": [
+            { "name": "extract_bearer_token()", "desc": "Parses Bearer token from Authorization header" },
+            { "name": "split_once(' ').unwrap()", "desc": "The panicking call -- crashes on empty header values" }
+          ],
+          "explanation": "The old code called <code>.unwrap()</code> on <code>split_once</code>, which panics when the header value has no space (empty string or malformed). This is the root cause of the production crash."
+        },
+        "after": {
+          "code": [
+            { "line": 18, "text": "pub fn extract_bearer_token(headers: &HeaderMap) -> Result<&str, AuthError> {" },
+            { "line": 19, "text": "    let header = headers" },
+            { "line": 20, "text": "        .get(AUTHORIZATION)" },
+            { "line": 21, "text": "        .ok_or(AuthError::MissingHeader)?;" },
+            { "line": 22, "text": "" },
+            { "line": 23, "text": "    let value = header.to_str().map_err(|_| AuthError::InvalidHeader)?;", "type": "added" },
+            { "line": 24, "text": "    let value = value.trim();", "type": "added" },
+            { "line": 25, "text": "    if value.is_empty() {", "type": "added" },
+            { "line": 26, "text": "        return Err(AuthError::EmptyHeader);", "type": "added" },
+            { "line": 27, "text": "    }", "type": "added" },
+            { "line": 28, "text": "", "type": "added" },
+            { "line": 29, "text": "    let (scheme, token) = value", "type": "added" },
+            { "line": 30, "text": "        .split_once(' ')", "type": "added" },
+            { "line": 31, "text": "        .ok_or(AuthError::MalformedHeader)?;", "type": "added" },
+            { "line": 32, "text": "", "type": "added" },
+            { "line": 33, "text": "    if !scheme.eq_ignore_ascii_case(\"Bearer\") {", "type": "added" },
+            { "line": 34, "text": "        return Err(AuthError::InvalidScheme);", "type": "added" },
+            { "line": 35, "text": "    }", "type": "added" },
+            { "line": 36, "text": "" },
+            { "line": 37, "text": "    Ok(token)" },
+            { "line": 38, "text": "}" }
+          ],
+          "identifiers": [
+            { "name": "AuthError::EmptyHeader", "desc": "New error variant for empty Authorization header values" },
+            { "name": "AuthError::MalformedHeader", "desc": "New error variant replacing the unwrap() panic path" },
+            { "name": "eq_ignore_ascii_case()", "desc": "Case-insensitive scheme check per RFC 7235" }
+          ],
+          "explanation": "The fix replaces <code>.unwrap()</code> with <code>.ok_or(AuthError::MalformedHeader)?</code>, adds an early empty-string guard, and makes the scheme comparison case-insensitive per the HTTP spec. No more panics on malformed headers."
+        },
+        "why": "Production crash (issue #142): clients sending an empty <code>Authorization:</code> header caused a panic in the auth extractor. The unwrap was the only panic-path in the request pipeline."
+      }
+    ],
+    "refactors": [
+      {
+        "id": "src-validation-mod-rs",
+        "file": "src/validation/mod.rs",
+        "oldFile": "src/handlers/validation.rs",
+        "status": "renamed",
+        "desc": "Move validation to shared module",
+        "complexity": { "added": 4, "removed": 2 },
+        "commits": ["c3d4e5f"],
+        "related": [
+          { "id": "src-controllers-users-rs", "file": "src/controllers/users.rs", "tab": "refactors" }
+        ],
+        "breaking": false,
+        "context": "Validation logic was buried inside the handlers directory but used by multiple modules. Extracting it to a top-level <code>src/validation/</code> module makes the dependency explicit and avoids circular imports as we add more controllers.",
+        "before": {
+          "code": [
+            { "line": 1, "text": "// src/handlers/validation.rs" },
+            { "line": 2, "text": "use crate::handlers::errors::ValidationError;", "type": "removed" },
+            { "line": 3, "text": "" },
+            { "line": 4, "text": "pub fn validate_email(email: &str) -> Result<(), ValidationError> {" },
+            { "line": 5, "text": "    if !email.contains('@') || email.len() > 254 {" },
+            { "line": 6, "text": "        return Err(ValidationError::InvalidEmail);" },
+            { "line": 7, "text": "    }" },
+            { "line": 8, "text": "    Ok(())" },
+            { "line": 9, "text": "}" },
+            { "line": 10, "text": "" },
+            { "line": 11, "text": "pub fn validate_username(name: &str) -> Result<(), ValidationError> {", "type": "removed" },
+            { "line": 12, "text": "    if name.len() < 3 || name.len() > 32 {" },
+            { "line": 13, "text": "        return Err(ValidationError::InvalidUsername);" },
+            { "line": 14, "text": "    }" },
+            { "line": 15, "text": "    Ok(())" },
+            { "line": 16, "text": "}" }
+          ],
+          "identifiers": [
+            { "name": "crate::handlers::errors::ValidationError", "desc": "Old import path, tightly coupled to handlers" },
+            { "name": "validate_email()", "desc": "Email format validator" },
+            { "name": "validate_username()", "desc": "Username length validator" }
+          ],
+          "explanation": "The file lived under <code>src/handlers/</code> and imported error types from a sibling module, coupling validation to the handler layer."
+        },
+        "after": {
+          "code": [
+            { "line": 1, "text": "// src/validation/mod.rs" },
+            { "line": 2, "text": "use crate::errors::ValidationError;", "type": "added" },
+            { "line": 3, "text": "" },
+            { "line": 4, "text": "pub fn validate_email(email: &str) -> Result<(), ValidationError> {" },
+            { "line": 5, "text": "    if !email.contains('@') || email.len() > 254 {" },
+            { "line": 6, "text": "        return Err(ValidationError::InvalidEmail);" },
+            { "line": 7, "text": "    }" },
+            { "line": 8, "text": "    Ok(())" },
+            { "line": 9, "text": "}" },
+            { "line": 10, "text": "" },
+            { "line": 11, "text": "pub fn validate_username(name: &str) -> Result<(), ValidationError> {", "type": "added" },
+            { "line": 12, "text": "    if name.len() < 3 || name.len() > 32 {" },
+            { "line": 13, "text": "        return Err(ValidationError::InvalidUsername);" },
+            { "line": 14, "text": "    }" },
+            { "line": 15, "text": "    Ok(())" },
+            { "line": 16, "text": "}" }
+          ],
+          "identifiers": [
+            { "name": "crate::errors::ValidationError", "desc": "New top-level import path for shared error types" },
+            { "name": "validate_username()", "desc": "Unchanged logic, but now at a shared path accessible to all modules" }
+          ],
+          "explanation": "After the move, the import changes from <code>crate::handlers::errors</code> to <code>crate::errors</code>. The function bodies are identical -- only the module location and import path changed."
+        },
+        "why": "Both the user controller and an upcoming admin controller need to validate emails and usernames. Keeping validation inside <code>handlers/</code> forced a circular dependency. Promoting it to a shared module resolves this."
+      },
+      {
+        "id": "src-controllers-users-rs",
+        "file": "src/controllers/users.rs",
+        "oldFile": "src/handlers/users.rs",
+        "status": "renamed",
+        "desc": "Rename handlers to controllers",
+        "complexity": { "added": 2, "removed": 2 },
+        "commits": ["d4e5f6g"],
+        "related": [
+          { "id": "src-validation-mod-rs", "file": "src/validation/mod.rs", "tab": "refactors" }
+        ],
+        "breaking": true,
+        "breakingDetail": "All imports from <code>crate::handlers::users</code> must update to <code>crate::controllers::users</code>",
+        "context": "The team adopted a convention of calling request-handling modules \"controllers\" rather than \"handlers\" to align with the rest of our Rust services. This is a mechanical rename with updated import paths.",
+        "before": {
+          "code": [
+            { "line": 1, "text": "// src/handlers/users.rs" },
+            { "line": 2, "text": "use crate::handlers::validation::{validate_email, validate_username};", "type": "removed" },
+            { "line": 3, "text": "use crate::db::UserRepository;", "type": "removed" },
+            { "line": 4, "text": "" },
+            { "line": 5, "text": "pub async fn create_user(" },
+            { "line": 6, "text": "    repo: UserRepository," },
+            { "line": 7, "text": "    payload: CreateUserPayload," },
+            { "line": 8, "text": ") -> Result<Json<User>, AppError> {" },
+            { "line": 9, "text": "    validate_email(&payload.email)?;" },
+            { "line": 10, "text": "    validate_username(&payload.username)?;" },
+            { "line": 11, "text": "    let user = repo.insert(payload).await?;" },
+            { "line": 12, "text": "    Ok(Json(user))" },
+            { "line": 13, "text": "}" }
+          ],
+          "identifiers": [
+            { "name": "crate::handlers::validation", "desc": "Old import path for validation functions" },
+            { "name": "crate::db::UserRepository", "desc": "Database abstraction for user operations" },
+            { "name": "create_user()", "desc": "Handler for POST /users" }
+          ],
+          "explanation": "Lived at <code>src/handlers/users.rs</code> with imports referencing the old <code>handlers</code> module path."
+        },
+        "after": {
+          "code": [
+            { "line": 1, "text": "// src/controllers/users.rs" },
+            { "line": 2, "text": "use crate::validation::{validate_email, validate_username};", "type": "added" },
+            { "line": 3, "text": "use crate::db::UserRepository;", "type": "added" },
+            { "line": 4, "text": "" },
+            { "line": 5, "text": "pub async fn create_user(" },
+            { "line": 6, "text": "    repo: UserRepository," },
+            { "line": 7, "text": "    payload: CreateUserPayload," },
+            { "line": 8, "text": ") -> Result<Json<User>, AppError> {" },
+            { "line": 9, "text": "    validate_email(&payload.email)?;" },
+            { "line": 10, "text": "    validate_username(&payload.username)?;" },
+            { "line": 11, "text": "    let user = repo.insert(payload).await?;" },
+            { "line": 12, "text": "    Ok(Json(user))" },
+            { "line": 13, "text": "}" }
+          ],
+          "identifiers": [
+            { "name": "crate::validation", "desc": "New shared import path (was crate::handlers::validation)" },
+            { "name": "crate::db::UserRepository", "desc": "Unchanged database import" }
+          ],
+          "explanation": "File moved from <code>src/handlers/users.rs</code> to <code>src/controllers/users.rs</code>. The validation import path updated from <code>crate::handlers::validation</code> to <code>crate::validation</code> to reflect both the rename and the earlier extraction."
+        },
+        "why": "Standardizing on \"controllers\" across all Rust services reduces cognitive overhead when switching between projects. The old \"handlers\" name conflicted with Axum's own Handler trait terminology."
+      }
+    ],
+    "chores": [
+      {
+        "id": "src-main-rs",
+        "file": "src/main.rs",
+        "status": "modified",
+        "desc": "Wire up rate limiter and update module paths",
+        "complexity": { "added": 6, "removed": 4 },
+        "commits": ["a1b2c3d", "d4e5f6g"],
+        "related": [
+          { "id": "src-middleware-rate_limit-rs", "file": "src/middleware/rate_limit.rs", "tab": "features" },
+          { "id": "src-controllers-users-rs", "file": "src/controllers/users.rs", "tab": "refactors" }
+        ],
+        "breaking": false,
+        "context": "The application entrypoint needs two updates: (1) add the rate-limiting middleware layer to the Axum router, and (2) update module declarations from <code>mod handlers</code> to <code>mod controllers</code> to match the rename.",
+        "before": {
+          "code": [
+            { "line": 5, "text": "mod auth;" },
+            { "line": 6, "text": "mod db;" },
+            { "line": 7, "text": "mod handlers;", "type": "removed" },
+            { "line": 8, "text": "mod middleware;" },
+            { "line": 9, "text": "" },
+            { "line": 22, "text": "    let app = Router::new()" },
+            { "line": 23, "text": "        .route(\"/users\", post(handlers::users::create_user))", "type": "removed" },
+            { "line": 24, "text": "        .route(\"/users/:id\", get(handlers::users::get_user))", "type": "removed" },
+            { "line": 25, "text": "        .layer(middleware::CorsLayer::permissive())", "type": "removed" },
+            { "line": 26, "text": "        .layer(middleware::RequestLogger::new());" }
+          ],
+          "identifiers": [
+            { "name": "mod handlers", "desc": "Old module declaration for request handlers" },
+            { "name": "handlers::users::create_user", "desc": "Old path to user creation handler" },
+            { "name": "handlers::users::get_user", "desc": "Old path to user retrieval handler" }
+          ],
+          "explanation": "Before: routes referenced <code>handlers::users</code> and no rate limiting layer was present in the middleware stack."
+        },
+        "after": {
+          "code": [
+            { "line": 5, "text": "mod auth;" },
+            { "line": 6, "text": "mod controllers;", "type": "added" },
+            { "line": 7, "text": "mod db;" },
+            { "line": 8, "text": "mod middleware;" },
+            { "line": 9, "text": "mod validation;", "type": "added" },
+            { "line": 10, "text": "" },
+            { "line": 23, "text": "    let limiter = middleware::RateLimiter::new(100, 60);", "type": "added" },
+            { "line": 24, "text": "    let app = Router::new()" },
+            { "line": 25, "text": "        .route(\"/users\", post(controllers::users::create_user))", "type": "added" },
+            { "line": 26, "text": "        .route(\"/users/:id\", get(controllers::users::get_user))", "type": "added" },
+            { "line": 27, "text": "        .layer(axum::middleware::from_fn(move |addr, req, next| {", "type": "added" },
+            { "line": 28, "text": "            limiter.clone().check(addr, req, next)", "type": "added" },
+            { "line": 29, "text": "        }))" },
+            { "line": 30, "text": "        .layer(middleware::CorsLayer::permissive())" },
+            { "line": 31, "text": "        .layer(middleware::RequestLogger::new());" }
+          ],
+          "identifiers": [
+            { "name": "mod controllers", "desc": "Renamed module declaration (was mod handlers)" },
+            { "name": "mod validation", "desc": "New top-level module for shared validation logic" },
+            { "name": "RateLimiter::new(100, 60)", "desc": "100 requests per 60-second sliding window" },
+            { "name": "controllers::users", "desc": "Updated path to user handlers" }
+          ],
+          "explanation": "After: declares <code>mod controllers</code> and <code>mod validation</code>, creates a <code>RateLimiter</code> with 100 req/min, and wires it as an Axum middleware layer before CORS and logging."
+        },
+        "why": "Glue commit that ties together the rate limiter feature and the handlers-to-controllers rename. Without these changes in <code>main.rs</code>, neither the new middleware nor the renamed modules would be reachable."
+      }
+    ]
+  }
+}</script>
+
+<script>
+(function() {
+  var data = JSON.parse(document.getElementById('review-data').textContent);
+  var root = document.getElementById('cr-root');
+  var TAB_LABELS = { features: 'Features', fixes: 'Bug Fixes', refactors: 'Refactors', chores: 'Chores' };
+  var STATUS_LABELS = { 'new': 'CREATED', modified: 'MODIFIED', deleted: 'DELETED', renamed: 'RENAMED' };
+
+  var ICON_PENCIL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+  var ICON_COPY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function() { t.classList.remove('show'); }, 2000);
+  }
+
+  var tabOrder = ['features', 'fixes', 'refactors', 'chores'].filter(function(t) {
+    return data.sections[t] && data.sections[t].length > 0;
+  });
+  var totalSections = data.summary.length;
+
+  // Header
+  var projectSuffix = data.projectName ? ' — ' + esc(data.projectName) : '';
+  document.title = esc(data.title) + projectSuffix;
+
+  var headerHTML = '<h1>' + esc(data.title) + '</h1>' +
+    '<p class="subtitle">Generated ' + esc(data.date) + ' from ' + esc(data.scope) + '</p>' +
+    '<div class="stats-bar">' + data.stats.files + ' files changed, ' +
+    '<span class="stat-add">+' + data.stats.added + '</span> / ' +
+    '<span class="stat-del">-' + data.stats.deleted + '</span> lines</div>';
+
+  // Build commit → files map from sections
+  var commitFileMap = {};
+  if (data.commits) {
+    data.commits.forEach(function(c) { commitFileMap[c.hash] = []; });
+  }
+  for (var tab in data.sections) {
+    data.sections[tab].forEach(function(s) {
+      if (s.commits) {
+        s.commits.forEach(function(h) {
+          if (commitFileMap[h]) {
+            commitFileMap[h].push({ id: s.id, file: s.file, tab: tab });
+          }
+        });
+      }
+    });
+  }
+
+  // Commits timeline tab panel
+  var commitsHTML = '';
+  var hasCommits = data.commits && data.commits.length > 0;
+  if (hasCommits) {
+    commitsHTML = '<div class="tab-panel" data-tab="commits"><ul class="commits-timeline">';
+    data.commits.forEach(function(c) {
+      commitsHTML += '<li class="commit-node">' +
+        '<span class="commit-dot"></span>' +
+        '<div class="commit-header">' +
+        '<span class="commit-hash">' + esc(c.hash) + '</span>' +
+        '<span class="commit-msg">' + esc(c.message) + '</span>' +
+        '<span class="commit-meta">' + esc(c.author || '') + (c.date ? ' · ' + esc(c.date) : '') + '</span>' +
+        '</div>';
+      var files = commitFileMap[c.hash] || [];
+      if (files.length > 0) {
+        commitsHTML += '<div class="commit-files">';
+        files.forEach(function(f) {
+          commitsHTML += '<a class="commit-file-pill" href="#' + esc(f.id) + '" data-target-tab="' + esc(f.tab) + '">' + esc(f.file) + '</a>';
+        });
+        commitsHTML += '</div>';
+      }
+      commitsHTML += '</li>';
+    });
+    commitsHTML += '</ul></div>';
+  }
+
+  // Skipped files tab panel
+  var skippedHTML = '';
+  var hasSkipped = data.skipped && data.skipped.length > 0;
+  if (hasSkipped) {
+    skippedHTML = '<div class="tab-panel" data-tab="skipped"><ul class="skipped-list">';
+    data.skipped.forEach(function(s) {
+      skippedHTML += '<li>' +
+        '<span class="skipped-file">' + esc(s.file) + '</span>' +
+        '<span class="skipped-reason">— ' + esc(s.reason) + '</span>' +
+        '</li>';
+    });
+    skippedHTML += '</ul></div>';
+  }
+
+  // Tab bar
+  var tabBarHTML = '<nav class="tab-bar">' +
+    '<button class="tab active" data-tab="summary">Summary <span class="tab-count">' + totalSections + '</span></button>';
+  tabOrder.forEach(function(t) {
+    tabBarHTML += '<button class="tab" data-tab="' + t + '">' + TAB_LABELS[t] +
+      ' <span class="tab-count">' + data.sections[t].length + '</span></button>';
+  });
+  if (hasCommits) {
+    tabBarHTML += '<button class="tab" data-tab="commits">Commits <span class="tab-count">' + data.commits.length + '</span></button>';
+  }
+  if (hasSkipped) {
+    tabBarHTML += '<button class="tab" data-tab="skipped">Skipped <span class="tab-count">' + data.skipped.length + '</span></button>';
+  }
+  tabBarHTML += '<span class="tab-bar-right">' +
+    '<button class="next-unreviewed" id="next-unreviewed" title="Jump to next unreviewed section (n)">Next ▸</button>' +
+    '<button class="expand-toggle" title="Expand all sections">Expand all</button>' +
+    '<button class="export-notes" id="export-notes" title="Export sections and notes">Export</button>' +
+    '<span class="review-progress">0 / ' + totalSections + ' reviewed</span>' +
+    '</span></nav>';
+
+  // Summary table
+  var summaryHTML = '<div class="tab-panel active" data-tab="summary">' +
+    '<table class="summary-table"><thead><tr><th>File</th><th>Status</th><th>Tab</th><th>Description</th><th class="churn-col">Churn</th></tr></thead><tbody>';
+  data.summary.forEach(function(s) {
+    var tabLabel = TAB_LABELS[s.tab] ? TAB_LABELS[s.tab].replace('Bug ', '') : s.tab;
+    var status = s.status || 'modified';
+    var statusCls = status;
+    var statusLabel = STATUS_LABELS[status] || status.toUpperCase();
+    var churn = '';
+    if (s.added != null || s.removed != null) {
+      var a = s.added || 0;
+      var r = s.removed || 0;
+      churn = '<span class="churn-add">+' + a + '</span> <span class="churn-del">-' + r + '</span>';
+    }
+    summaryHTML += '<tr data-search-file="' + esc(s.file).toLowerCase() + '" data-search-desc="' + esc(s.desc).toLowerCase() + '">' +
+      '<td><a href="#' + esc(s.id) + '" data-target-tab="' + esc(s.tab) + '">' +
+      esc(s.file) + '</a></td>' +
+      '<td><span class="badge-status ' + statusCls + '">' + statusLabel + '</span></td>' +
+      '<td class="tab-col">' + esc(tabLabel) + '</td>' +
+      '<td class="desc-col">' + esc(s.desc) + '</td>' +
+      '<td class="churn-td">' + churn + '</td></tr>';
+  });
+  summaryHTML += '</tbody></table></div>';
+
+  // Breadcrumb file path renderer
+  function renderBreadcrumb(filepath) {
+    var parts = filepath.split('/');
+    var html = '';
+    for (var i = 0; i < parts.length; i++) {
+      if (i > 0) html += '<span class="bc-sep">›</span>';
+      if (i === parts.length - 1) {
+        html += '<span class="bc-file">' + esc(parts[i]) + '</span>';
+      } else {
+        html += '<span class="bc-seg">' + esc(parts[i]) + '</span>';
+      }
+    }
+    return html;
+  }
+
+  // Build code block
+  function buildCB(lines) {
+    var html = '<div class="cb">';
+    lines.forEach(function(l) {
+      var cls = l.type === 'added' ? ' class="added"' : l.type === 'removed' ? ' class="removed"' : '';
+      var ln = (l.line != null && l.line !== '') ? String(l.line) : '';
+      html += '<div' + cls + ' data-line="' + esc(ln) + '">' + esc(l.text) + '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  // Build identifiers list
+  function buildIds(ids) {
+    if (!ids || ids.length === 0) return '';
+    var html = '<div class="key-ids"><h5>Key identifiers</h5><ul>';
+    ids.forEach(function(id) {
+      html += '<li><code>' + esc(id.name) + '</code> — ' + esc(id.desc) + '</li>';
+    });
+    html += '</ul></div>';
+    return html;
+  }
+
+  // Build a diff column (before or after)
+  function buildDiffCol(block, label) {
+    return '<div class="diff-col"><h5>' + label + '</h5>' +
+      buildCB(block.code) +
+      buildIds(block.identifiers) +
+      '<p class="explanation">' + block.explanation + '</p></div>';
+  }
+
+  // Build sections
+  function buildSection(s) {
+    var html = '<section class="change" id="' + esc(s.id) + '" data-search-file="' + esc(s.file).toLowerCase() + '" data-search-desc="' + esc(s.desc).toLowerCase() + '"><details><summary>';
+
+    // Status badge
+    var status = s.status || 'modified';
+    var statusLabel = STATUS_LABELS[status] || status.toUpperCase();
+    html += '<span class="badge-status ' + status + '">' + statusLabel + '</span>';
+
+
+
+    // File name as breadcrumb
+    html += '<span class="bc-path file-name">' + renderBreadcrumb(s.file) + '</span>';
+
+    html += '<span class="desc">\u2014 ' + esc(s.desc) + '</span>' +
+      '<span class="section-right">' +
+      '<span class="sr-breaking">' + (s.breaking ? '<span class="badge breaking">BREAKING</span>' : '') + '</span>' +
+      '<span class="sr-locs"><span class="badge complexity"><span class="stat-add">+' + s.complexity.added + '</span> / <span class="stat-del">-' + s.complexity.removed + '</span></span></span>' +
+      '<span class="sr-commits">';
+
+    // Commit pills
+    if (s.commits && s.commits.length > 0) {
+      s.commits.forEach(function(h) {
+        html += '<span class="commit-pill">' + esc(h) + '</span>';
+      });
+    }
+    html += '</span>';
+
+    html += '<button class="copy-section-btn" data-section-id="' + esc(s.id) + '" title="Copy section as context">' + ICON_COPY + '</button>' +
+      '<span class="note-indicator" data-file="' + esc(s.id) + '">' + ICON_PENCIL + '</span>' +
+      '<span class="status-group" data-file="' + esc(s.id) + '">' +
+      '<button class="status-opt" data-val="approved" title="Approved">\u2713</button>' +
+      '<button class="status-opt" data-val="rejected" title="Rejected">\u2717</button>' +
+      '<button class="status-opt" data-val="concern" title="Concern">\u26a0</button>' +
+      '</span></span></summary>';
+
+    if (s.status === 'renamed' && s.oldFile) {
+      html += '<p class="rename-from">Renamed from <code>' + esc(s.oldFile) + '</code></p>';
+    }
+    html += '<p class="context">' + s.context + '</p>';
+
+    // Related changes
+    if (s.related && s.related.length > 0) {
+      html += '<div class="related-changes"><span class="related-label">Related:</span>';
+      s.related.forEach(function(r) {
+        html += '<a class="related-pill" href="#' + esc(r.id) + '" data-target-tab="' + esc(r.tab) + '">' + esc(r.file) + '</a>';
+      });
+      html += '</div>';
+    }
+
+    if (s.breaking && s.breakingDetail) {
+      html += '<p class="breaking-detail">' + s.breakingDetail + '</p>';
+    }
+
+    // Diff layout
+    if (s.before && s.after) {
+      // Side-by-side
+      html += '<div class="diff-columns">' +
+        buildDiffCol(s.before, 'Before') +
+        buildDiffCol(s.after, 'After') +
+        '</div>';
+    } else if (s.before && !s.after) {
+      // Deletion-only: show before block full-width
+      html += '<div class="diff-full">' + buildCB(s.before.code) + '</div>';
+      if (s.before.identifiers && s.before.identifiers.length > 0) {
+        html += buildIds(s.before.identifiers);
+      }
+      if (s.before.explanation) {
+        html += '<p class="explanation">' + s.before.explanation + '</p>';
+      }
+    } else if (s.after) {
+      // Addition-only: show after block full-width
+      html += '<div class="diff-full">' + buildCB(s.after.code) + '</div>';
+      if (s.after.identifiers && s.after.identifiers.length > 0) {
+        html += buildIds(s.after.identifiers);
+      }
+      if (s.after.explanation) {
+        html += '<p class="explanation">' + s.after.explanation + '</p>';
+      }
+    }
+
+    if (s.note) {
+      html += '<p class="note">' + s.note + '</p>';
+    }
+
+    html += '<h4 class="why-heading">Why this changed:</h4>' +
+      '<p class="why">' + s.why + '</p>' +
+      '<ul class="review-checklist">' +
+      '<li><input type="checkbox" id="chk-tests-' + esc(s.id) + '" data-chk="tests" data-file="' + esc(s.id) + '"><label class="chk-pill" for="chk-tests-' + esc(s.id) + '">Tests</label></li>' +
+      '<li><input type="checkbox" id="chk-errors-' + esc(s.id) + '" data-chk="errors" data-file="' + esc(s.id) + '"><label class="chk-pill" for="chk-errors-' + esc(s.id) + '">Error handling</label></li>' +
+      '<li><input type="checkbox" id="chk-docs-' + esc(s.id) + '" data-chk="docs" data-file="' + esc(s.id) + '"><label class="chk-pill" for="chk-docs-' + esc(s.id) + '">Docs</label></li>' +
+      '<li><input type="checkbox" id="chk-security-' + esc(s.id) + '" data-chk="security" data-file="' + esc(s.id) + '"><label class="chk-pill" for="chk-security-' + esc(s.id) + '">Security</label></li>' +
+      '</ul>' +
+      '<textarea class="reviewer-note" data-file="' + esc(s.id) + '" placeholder="Add a note..."></textarea>' +
+      '</details></section>';
+
+    return html;
+  }
+
+  // Tab panels
+  var panelsHTML = '';
+  tabOrder.forEach(function(t) {
+    panelsHTML += '<div class="tab-panel" data-tab="' + t + '">';
+    data.sections[t].forEach(function(s) {
+      panelsHTML += buildSection(s);
+    });
+    panelsHTML += '</div>';
+  });
+
+  root.innerHTML = headerHTML + tabBarHTML + summaryHTML + panelsHTML + commitsHTML + skippedHTML;
+
+  // --- Interactive behavior ---
+
+  // Collapsible panels (commits + skipped)
+  function setupToggle(btnId, listId) {
+    var btn = document.getElementById(btnId);
+    var list = document.getElementById(listId);
+    if (!btn || !list) return;
+    btn.addEventListener('click', function() {
+      var isOpen = btn.classList.toggle('open');
+      list.classList.toggle('open', isOpen);
+    });
+  }
+
+  // Tab switching
+  function switchTab(tabName) {
+    root.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    root.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    var btn = root.querySelector('.tab[data-tab="' + tabName + '"]');
+    if (btn) btn.classList.add('active');
+    var panel = root.querySelector('.tab-panel[data-tab="' + tabName + '"]');
+    if (panel) panel.classList.add('active');
+  }
+  root.querySelectorAll('.tab').forEach(function(btn) {
+    btn.addEventListener('click', function() { switchTab(btn.dataset.tab); });
+  });
+
+  // Summary table links
+  root.querySelectorAll('a[data-target-tab]').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      switchTab(link.dataset.targetTab);
+      var target = root.querySelector(link.getAttribute('href'));
+      if (target) {
+        target.querySelector('details').open = true;
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+
+  // Status cycle: none → approved → rejected → concern → none
+  var STATUS_CYCLE = ['none', 'approved', 'rejected', 'concern'];
+  var STATUS_ICONS = { none: '\u25cb', approved: '\u2713', rejected: '\u2717', concern: '\u26a0' };
+  var STATUS_COLORS_MAP = { none: '#4a5568', approved: '#4ade80', rejected: '#f87171', concern: '#fbbf24' };
+
+  // Progress counter
+  var progress = root.querySelector('.review-progress');
+  var statusToggles = root.querySelectorAll('.status-toggle');
+  var total = statusToggles.length;
+  function updateProgress() {
+    var reviewed = 0;
+    statusToggles.forEach(function(t) { if (t.dataset.status !== 'none') reviewed++; });
+    progress.textContent = reviewed + ' / ' + total + ' reviewed';
+  }
+
+  // Expand all / Collapse all
+  var expandBtn = root.querySelector('.expand-toggle');
+  expandBtn.addEventListener('click', function() {
+    var activePanel = root.querySelector('.tab-panel.active');
+    var allDetails = activePanel ? activePanel.querySelectorAll('details') : root.querySelectorAll('details');
+    var allOpen = Array.from(allDetails).every(function(d) { return d.open; });
+    allDetails.forEach(function(d) { d.open = !allOpen; });
+    expandBtn.textContent = allOpen ? 'Expand all' : 'Collapse all';
+  });
+
+  // Status group persistence
+  var statusGroups = root.querySelectorAll('.status-group');
+  var total = statusGroups.length;
+  function updateProgress() {
+    var reviewed = 0;
+    statusGroups.forEach(function(g) { if (g.dataset.status && g.dataset.status !== 'none') reviewed++; });
+    progress.textContent = reviewed + ' / ' + total + ' reviewed';
+  }
+  statusGroups.forEach(function(group) {
+    var fileId = group.dataset.file;
+    var key = 'code-review:' + fileId + ':status';
+    var saved = localStorage.getItem(key) || 'none';
+    group.dataset.status = saved;
+    // Highlight active
+    group.querySelectorAll('.status-opt').forEach(function(opt) {
+      opt.classList.toggle('active', opt.dataset.val === saved);
+    });
+    var sec = group.closest('section.change');
+    if (sec) sec.dataset.status = saved;
+
+    group.addEventListener('click', function(e) {
+      var opt = e.target.closest('.status-opt');
+      if (!opt) return;
+      e.stopPropagation();
+      var val = opt.dataset.val;
+      var current = group.dataset.status;
+      // Toggle off if clicking the active one
+      var next = (val === current) ? 'none' : val;
+      group.dataset.status = next;
+      localStorage.setItem(key, next);
+      group.querySelectorAll('.status-opt').forEach(function(o) {
+        o.classList.toggle('active', o.dataset.val === next);
+      });
+      var sec = group.closest('section.change');
+      if (sec) sec.dataset.status = next;
+      updateProgress();
+    });
+  });
+  updateProgress();
+
+  // Reviewer notes persistence + note indicator
+  var noteTimer;
+  function updateNoteIndicator(fileId, hasNote) {
+    var dots = root.querySelectorAll('.note-indicator[data-file="' + fileId + '"]');
+    dots.forEach(function(dot) {
+      dot.classList.toggle('has-note', hasNote);
+    });
+  }
+  root.querySelectorAll('.reviewer-note').forEach(function(ta) {
+    var key = 'code-review:' + ta.dataset.file + ':note';
+    var saved = localStorage.getItem(key);
+    if (saved) {
+      ta.value = saved;
+      updateNoteIndicator(ta.dataset.file, true);
+    }
+    ta.addEventListener('input', function() {
+      clearTimeout(noteTimer);
+      var fileId = ta.dataset.file;
+      var val = ta.value;
+      noteTimer = setTimeout(function() { localStorage.setItem(key, val); }, 300);
+      updateNoteIndicator(fileId, val.trim().length > 0);
+    });
+  });
+
+
+
+  // Build section context as markdown
+  function sectionToMarkdown(s) {
+    var lines = [];
+    var statusTag = s.status ? ' [' + s.status.toUpperCase() + ']' : '';
+    lines.push('## `' + s.file + '`' + statusTag);
+    if (s.oldFile) lines.push('Renamed from `' + s.oldFile + '`');
+    lines.push('> ' + s.desc);
+    lines.push('');
+    if (s.breaking) {
+      lines.push('⚠️ **BREAKING**: ' + (s.breakingDetail || '').replace(/<[^>]+>/g, '`'));
+      lines.push('');
+    }
+    lines.push('**Context:** ' + (s.context || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
+    lines.push('');
+    function codeBlockMd(block, label) {
+      if (!block) return;
+      lines.push('### ' + label);
+      lines.push('```');
+      block.code.forEach(function(l) {
+        var prefix = l.type === 'added' ? '+ ' : l.type === 'removed' ? '- ' : '  ';
+        var ln = (l.line != null && l.line !== '') ? String(l.line).padStart(4) + ' ' : '     ';
+        lines.push(prefix + ln + l.text);
+      });
+      lines.push('```');
+      if (block.identifiers && block.identifiers.length > 0) {
+        lines.push('**Key identifiers:**');
+        block.identifiers.forEach(function(id) {
+          lines.push('- `' + id.name + '` — ' + id.desc);
+        });
+      }
+      if (block.explanation) {
+        lines.push('');
+        lines.push(block.explanation.replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
+      }
+      lines.push('');
+    }
+    codeBlockMd(s.before, 'Before');
+    codeBlockMd(s.after, 'After');
+    lines.push('**Why this changed:** ' + (s.why || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
+    return lines.join('\n');
+  }
+
+  // Find section data by ID
+  function findSectionData(id) {
+    for (var t in data.sections) {
+      for (var i = 0; i < data.sections[t].length; i++) {
+        if (data.sections[t][i].id === id) return data.sections[t][i];
+      }
+    }
+    return null;
+  }
+
+  // Copy section as context
+  root.addEventListener('click', function(e) {
+    var btn = e.target.closest('.copy-section-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    var secData = findSectionData(btn.dataset.sectionId);
+    if (!secData) return;
+    var md = sectionToMarkdown(secData);
+    navigator.clipboard.writeText(md).then(function() {
+      btn.classList.add('copied');
+      showToast('Section copied as context');
+      setTimeout(function() { btn.classList.remove('copied'); }, 1500);
+    }).catch(function() {
+      showToast('Could not copy — check clipboard permissions');
+    });
+  });
+
+  // Export: sections with statuses and notes as markdown
+  var STATUS_EMOJI = { none: '○', approved: '✅', rejected: '❌', concern: '⚠️' };
+  document.getElementById('export-notes').addEventListener('click', function() {
+    var lines = [];
+    lines.push('# Code Review');
+    lines.push('**' + data.projectName + '** — ' + data.date + ' — ' + data.scope);
+    lines.push('');
+
+    // Summary counts
+    var counts = { approved: 0, rejected: 0, concern: 0, none: 0 };
+    data.summary.forEach(function(s) {
+      var st = localStorage.getItem('code-review:' + s.id + ':status') || 'none';
+      counts[st] = (counts[st] || 0) + 1;
+    });
+    lines.push('**Summary:** ' + counts.approved + ' approved, ' + counts.rejected + ' rejected, ' + counts.concern + ' concerns, ' + counts.none + ' unreviewed');
+    lines.push('');
+
+    var hasContent = false;
+    data.summary.forEach(function(s) {
+      var status = localStorage.getItem('code-review:' + s.id + ':status') || 'none';
+      var note = localStorage.getItem('code-review:' + s.id + ':note') || '';
+
+      if (status !== 'none' || note.trim()) {
+        hasContent = true;
+        var emoji = STATUS_EMOJI[status] || '○';
+        var secData = findSectionData(s.id);
+        if (secData) {
+          lines.push(sectionToMarkdown(secData));
+        } else {
+          lines.push('## `' + s.file + '`');
+          lines.push('> ' + s.desc);
+        }
+        lines.push('');
+        lines.push('**Status:** ' + emoji + ' ' + (status === 'none' ? 'unreviewed' : status));
+        if (note.trim()) {
+          lines.push('');
+          lines.push('**Reviewer note:**');
+          lines.push(note.trim());
+        }
+        lines.push('');
+        lines.push('---');
+        lines.push('');
+      }
+    });
+
+    if (!hasContent) {
+      showToast('No statuses or notes to export');
+      return;
+    }
+
+    var md = lines.join('\n');
+    navigator.clipboard.writeText(md).then(function() {
+      showToast('Exported to clipboard as markdown');
+    }).catch(function() {
+      showToast('Could not copy — check clipboard permissions');
+    });
+  });
+
+  // Next unreviewed
+  document.getElementById('next-unreviewed').addEventListener('click', goToNextUnreviewed);
+  function goToNextUnreviewed() {
+    var unchecked = root.querySelectorAll('.status-group:not([data-status="approved"]):not([data-status="rejected"]):not([data-status="concern"])');
+    if (unchecked.length === 0) {
+      showToast('All sections reviewed ✓');
+      return;
+    }
+    // Find the first unchecked that's in a visible tab-panel
+    for (var i = 0; i < unchecked.length; i++) {
+      var section = unchecked[i].closest('section.change');
+      var panel = section.closest('.tab-panel');
+      if (panel) {
+        switchTab(panel.dataset.tab);
+        section.querySelector('details').open = true;
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
+  }
+
+  // Keyboard shortcuts
+  function getAllVisibleSections() {
+    var activePanel = root.querySelector('.tab-panel.active');
+    if (!activePanel) return [];
+    return Array.from(activePanel.querySelectorAll('section.change'));
+  }
+  function getFocusedSectionIndex(sections) {
+    var scrollTop = window.scrollY || document.documentElement.scrollTop;
+    var closest = 0;
+    var closestDist = Infinity;
+    for (var i = 0; i < sections.length; i++) {
+      var dist = Math.abs(sections[i].getBoundingClientRect().top);
+      if (dist < closestDist) { closestDist = dist; closest = i; }
+    }
+    return closest;
+  }
+
+  document.addEventListener('keydown', function(e) {
+    // Don't capture when typing in inputs
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      if (e.key === 'Escape') { e.target.blur(); }
+      return;
+    }
+
+    var sections = getAllVisibleSections();
+    var idx;
+
+    switch (e.key) {
+      case 'j': // Next section
+        if (sections.length === 0) return;
+        idx = getFocusedSectionIndex(sections);
+        if (idx < sections.length - 1) idx++;
+        sections[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        break;
+      case 'e': // Expand/collapse focused
+        if (sections.length === 0) return;
+        idx = getFocusedSectionIndex(sections);
+        var det = sections[idx].querySelector('details');
+        if (det) det.open = !det.open;
+        break;
+      case 'x': // Toggle reviewed on focused
+        if (sections.length === 0) return;
+        idx = getFocusedSectionIndex(sections);
+        var group = sections[idx].querySelector('.status-group');
+        if (group) {
+          // Cycle through: none -> approved -> rejected -> concern -> none
+          var current = group.dataset.status || 'none';
+          var cycle = ['none', 'approved', 'rejected', 'concern'];
+          var ci = cycle.indexOf(current);
+          var next = cycle[(ci + 1) % cycle.length];
+          group.dataset.status = next;
+          localStorage.setItem('code-review:' + group.dataset.file + ':status', next);
+          group.querySelectorAll('.status-opt').forEach(function(o) {
+            o.classList.toggle('active', o.dataset.val === next);
+          });
+          var sec = group.closest('section.change');
+          if (sec) sec.dataset.status = next;
+          updateProgress();
+        }
+        break;
+      case 'n': // Next unreviewed
+        e.preventDefault();
+        goToNextUnreviewed();
+        break;
+      case '/': // Open command palette
+        e.preventDefault();
+        openPalette();
+        break;
+      case 'k': // Command palette (Ctrl/Cmd+K)
+        if (e.metaKey || e.ctrlKey) {
+          e.preventDefault();
+          openPalette();
+        } else {
+          // Prev section (plain k)
+          if (sections.length === 0) return;
+          idx = getFocusedSectionIndex(sections);
+          if (idx > 0) idx--;
+          sections[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        break;
+    }
+  });
+
+
+
+  // Command palette
+  var paletteOverlay = document.getElementById('cmd-palette-overlay');
+  var paletteInput = document.getElementById('cmd-palette-input');
+  var paletteResults = document.getElementById('cmd-palette-results');
+  var paletteItems = [];
+  var paletteSelectedIdx = 0;
+
+  // Build palette items from all sections
+  data.summary.forEach(function(s) {
+    paletteItems.push({ id: s.id, file: s.file, desc: s.desc, tab: s.tab, type: 'section' });
+  });
+  // Add tab actions
+  ['summary'].concat(tabOrder).forEach(function(t) {
+    var label = t === 'summary' ? 'Summary' : TAB_LABELS[t];
+    paletteItems.push({ id: '__tab__' + t, file: 'Go to ' + label + ' tab', desc: '', tab: t, type: 'tab' });
+  });
+
+  function openPalette() {
+    paletteOverlay.classList.add('open');
+    paletteInput.value = '';
+    paletteSelectedIdx = 0;
+    renderPaletteResults('');
+    setTimeout(function() { paletteInput.focus(); }, 50);
+  }
+  function closePalette() {
+    paletteOverlay.classList.remove('open');
+  }
+
+  function renderPaletteResults(query) {
+    var q = query.toLowerCase().trim();
+    var filtered = paletteItems.filter(function(item) {
+      if (!q) return true;
+      return item.file.toLowerCase().indexOf(q) !== -1 || item.desc.toLowerCase().indexOf(q) !== -1;
+    });
+    paletteSelectedIdx = Math.min(paletteSelectedIdx, Math.max(0, filtered.length - 1));
+    var html = '';
+    filtered.forEach(function(item, i) {
+      var cls = i === paletteSelectedIdx ? ' selected' : '';
+      if (item.type === 'tab') {
+        html += '<div class="cmd-palette-item' + cls + '" data-idx="' + i + '" data-action="tab" data-tab="' + esc(item.tab) + '">' +
+          '<span class="cpi-file">' + esc(item.file) + '</span></div>';
+      } else {
+        var tabLabel = TAB_LABELS[item.tab] || item.tab;
+        html += '<div class="cmd-palette-item' + cls + '" data-idx="' + i + '" data-action="section" data-id="' + esc(item.id) + '" data-tab="' + esc(item.tab) + '">' +
+          '<span class="cpi-tab">' + esc(tabLabel) + '</span>' +
+          '<span class="cpi-file">' + esc(item.file) + '</span>' +
+          '<span class="cpi-desc">' + esc(item.desc) + '</span></div>';
+      }
+    });
+    paletteResults.innerHTML = html;
+    paletteResults._filtered = filtered;
+  }
+
+  function executePaletteItem(el) {
+    if (!el) return;
+    var action = el.dataset.action;
+    if (action === 'tab') {
+      switchTab(el.dataset.tab);
+    } else if (action === 'section') {
+      switchTab(el.dataset.tab);
+      var target = root.querySelector('#' + el.dataset.id);
+      if (target) {
+        target.querySelector('details').open = true;
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+    closePalette();
+  }
+
+  paletteInput.addEventListener('input', function() {
+    paletteSelectedIdx = 0;
+    renderPaletteResults(paletteInput.value);
+  });
+  paletteInput.addEventListener('keydown', function(e) {
+    var items = paletteResults.querySelectorAll('.cmd-palette-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      paletteSelectedIdx = Math.min(paletteSelectedIdx + 1, items.length - 1);
+      renderPaletteResults(paletteInput.value);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      paletteSelectedIdx = Math.max(paletteSelectedIdx - 1, 0);
+      renderPaletteResults(paletteInput.value);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      var sel = paletteResults.querySelector('.cmd-palette-item.selected');
+      executePaletteItem(sel);
+    } else if (e.key === 'Escape') {
+      closePalette();
+    }
+  });
+  paletteResults.addEventListener('click', function(e) {
+    var item = e.target.closest('.cmd-palette-item');
+    if (item) executePaletteItem(item);
+  });
+  paletteOverlay.addEventListener('click', function(e) {
+    if (e.target === paletteOverlay) closePalette();
+  });
+
+  // Scroll breadcrumb bar
+  var bbBar = document.getElementById('breadcrumb-bar');
+  var allSections = root.querySelectorAll('section.change');
+  function updateBreadcrumb() {
+    var activePanel = root.querySelector('.tab-panel.active');
+    if (!activePanel || activePanel.dataset.tab === 'summary' || activePanel.dataset.tab === 'commits' || activePanel.dataset.tab === 'skipped') {
+      bbBar.classList.remove('visible');
+      return;
+    }
+    var sections = activePanel.querySelectorAll('section.change');
+    var current = null;
+    for (var i = 0; i < sections.length; i++) {
+      var rect = sections[i].getBoundingClientRect();
+      if (rect.top <= 80) current = sections[i];
+    }
+    if (!current) {
+      bbBar.classList.remove('visible');
+      return;
+    }
+    var tabName = activePanel.dataset.tab;
+    var tabLabel = TAB_LABELS[tabName] || tabName;
+    var fileAttr = current.dataset.searchFile || '';
+    var descAttr = current.dataset.searchDesc || '';
+    bbBar.innerHTML = '<span class="bb-tab">' + esc(tabLabel) + '</span>' +
+      '<span class="bb-sep">›</span>' +
+      '<span class="bb-file">' + esc(fileAttr) + '</span>' +
+      '<span class="bb-sep">—</span>' +
+      '<span class="bb-desc">' + esc(descAttr) + '</span>';
+    bbBar.classList.add('visible');
+  }
+  window.addEventListener('scroll', updateBreadcrumb, { passive: true });
+  root.querySelectorAll('.tab').forEach(function(btn) {
+    btn.addEventListener('click', function() { setTimeout(updateBreadcrumb, 50); });
+  });
+
+
+  // Review checklist persistence
+  root.querySelectorAll('.review-checklist input').forEach(function(cb) {
+    var key = 'code-review:' + cb.dataset.file + ':chk:' + cb.dataset.chk;
+    var pill = cb.nextElementSibling;
+    if (localStorage.getItem(key) === 'true') {
+      cb.checked = true;
+      if (pill) pill.classList.add('checked');
+    }
+    cb.addEventListener('change', function() {
+      localStorage.setItem(key, cb.checked);
+      if (pill) pill.classList.toggle('checked', cb.checked);
+    });
+  });
+
+  // Deep linking: read hash on load, update on tab switch / section open
+  function parseHash() {
+    var hash = window.location.hash.replace('#', '');
+    if (!hash) return;
+    var parts = hash.split('/');
+    var tabName = parts[0];
+    var sectionId = parts[1] || null;
+    // Check if it's a tab name
+    var tabBtn = root.querySelector('.tab[data-tab="' + tabName + '"]');
+    if (tabBtn) {
+      switchTab(tabName);
+      if (sectionId) {
+        var target = root.querySelector('#' + sectionId);
+        if (target) {
+          target.querySelector('details').open = true;
+          setTimeout(function() {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 100);
+        }
+      }
+    } else {
+      // Maybe it's just a section ID
+      var target = root.querySelector('#' + hash);
+      if (target) {
+        var panel = target.closest('.tab-panel');
+        if (panel) switchTab(panel.dataset.tab);
+        target.querySelector('details').open = true;
+        setTimeout(function() {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
+    }
+  }
+
+  // Update hash on tab switch
+  var origSwitchTab = switchTab;
+  switchTab = function(tabName) {
+    origSwitchTab(tabName);
+    history.replaceState(null, '', '#' + tabName);
+    setTimeout(updateBreadcrumb, 50);
+  };
+
+  // Parse hash on load
+  if (window.location.hash) {
+    parseHash();
+  }
+  window.addEventListener('hashchange', parseHash);
+
+})();
+</script>
+</body>
+</html>
