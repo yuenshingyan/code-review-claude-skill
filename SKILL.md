@@ -56,7 +56,7 @@ If a skipped file has significant manual changes mixed in (e.g. a manually edite
 
 ## Step 2 — Read the template
 
-Read the template file at `templates/code-review-template.html` (relative to this skill file's directory). This contains all CSS, HTML skeleton, and renderer JS. You will copy it verbatim and only fill in the JSON data slot.
+Read the template file at `~/.claude/templates/code-review-template.html`. This contains all CSS, HTML skeleton, and renderer JS. You will copy it verbatim and only fill in the JSON data slot.
 
 If the file does not exist, report the error and stop.
 
@@ -100,30 +100,17 @@ Omit any tab key from `sections` that has zero entries.
       "reason": "<why it was skipped, e.g. 'Auto-generated lock file (+1843 lines)'>"
     }
   ],
-  "summary": [
-    {
-      "id": "<section-id>",
-      "file": "<display file path>",
-      "tab": "<tab key>",
-      "desc": "<one-line description>",
-      "status": "<new|modified|deleted|renamed>",
-      "added": <int>,
-      "removed": <int>
-    }
-  ],
   "sections": {
     "<tab key>": [
       {
-        "id": "<section-id>",
         "file": "<display file path>",
         "status": "<new|modified|deleted|renamed>",
         "oldFile": "<original path — only when status is 'renamed', otherwise omit>",
         "desc": "<short description>",
-        "complexity": { "added": <int>, "removed": <int> },
+        "added": <int>,
+        "removed": <int>,
         "commits": ["<short hash>"],
-        "related": [
-          { "id": "<section-id>", "file": "<file path>", "tab": "<tab key>" }
-        ],
+        "related": ["<file path>"],
         "breaking": <bool>,
         "breakingDetail": "<what breaks — only when breaking is true, otherwise omit>",
         "context": "<2-3 sentences: what this file does, what the changed code does, background for a reviewer>",
@@ -150,19 +137,17 @@ Omit any tab key from `sections` that has zero entries.
 }
 ```
 
-### Section ID
-
-Derive from the file path: replace `/` and `.` with `-`. Example: `src/pages/items/server.rs` → `src-pages-items-server-rs`. For multi-file grouped sections, concatenate the IDs with `-`.
-
 ### Field rules
 
-- **`status`**: Required on both summary entries and sections. One of `"new"` (file created), `"modified"` (file changed), `"deleted"` (file removed), `"renamed"` (file moved/renamed). Detect renames from `git diff -M` output.
+- **No `id` fields needed.** The template derives section IDs automatically from file paths (replacing `/` and `.` with `-`).
+- **No `summary` array needed.** The template builds the summary table automatically from `sections`.
+- **`status`**: Required on each section. One of `"new"` (file created), `"modified"` (file changed), `"deleted"` (file removed), `"renamed"` (file moved/renamed). Detect renames from `git diff -M` output.
 - **`oldFile`**: Only include when `status` is `"renamed"`. The original file path before the rename.
+- **`added`** / **`removed`**: Lines added/removed for this file. Shown in the summary churn column and section header.
 - **`commits`** (top-level): Array of all commits in the review range (Mode B only). Ordered newest-first. Each entry has `hash`, `message`, `author`, `date`. Omit for Mode A.
 - **`commits`** (per-section): Array of short commit hashes that touched this file. Derived from `git log` output. Omit for Mode A.
 - **`skipped`**: Array of files that were excluded from review. Each entry has `file` and `reason`. Omit if nothing was skipped.
-- **`related`**: Array of related sections — files that import, call, or are tightly coupled with this one. Each entry has `id`, `file`, `tab`. Detect relationships from: import statements, function calls across files, files changed in the same commit for the same purpose, migration + schema pairs, test + implementation pairs. Omit if no relationships detected.
-- **`summary[].added`** / **`summary[].removed`**: Lines added/removed for this file. Shown in the churn column of the summary table.
+- **`related`**: Array of related file paths (strings, not objects) — files that import, call, or are tightly coupled with this one. The template resolves them to section links automatically. Detect relationships from: import statements, function calls across files, files changed in the same commit for the same purpose, migration + schema pairs, test + implementation pairs. Omit if no relationships detected.
 - **`before`**: Set to `null` for purely additive sections (new file, new function, new match arm). The renderer will use full-width layout for the `after` block.
 - **`after`**: Set to `null` for deletion-only sections (file removed). The renderer will use full-width layout for the `before` block, showing all removed code.
 - **`breakingDetail`**: Only include when `breaking` is `true`. Explain specifically what breaks: which callers, consumers, or behavior changes.
@@ -187,15 +172,13 @@ Derive from the file path: replace `/` and `.` with `-`. Example: `src/pages/ite
 **Modified file with related changes:**
 ```json
 {
-  "id": "src-auth-middleware-rs",
   "file": "src/auth/middleware.rs",
   "status": "modified",
   "desc": "Add JWT token refresh on expiry",
-  "complexity": { "added": 42, "removed": 8 },
+  "added": 42,
+  "removed": 8,
   "commits": ["a1b2c3d"],
-  "related": [
-    { "id": "src-auth-claims-rs", "file": "src/auth/claims.rs", "tab": "features" }
-  ],
+  "related": ["src/auth/claims.rs"],
   "breaking": true,
   "breakingDetail": "<code>AuthMiddleware::new()</code> now requires a <code>RefreshConfig</code> parameter.",
   "context": "This middleware intercepts every authenticated request and validates the JWT.",
@@ -228,15 +211,13 @@ Derive from the file path: replace `/` and `.` with `-`. Example: `src/pages/ite
 **New file:**
 ```json
 {
-  "id": "src-auth-claims-rs",
   "file": "src/auth/claims.rs",
   "status": "new",
   "desc": "New RefreshClaim type and validation",
-  "complexity": { "added": 38, "removed": 0 },
+  "added": 38,
+  "removed": 0,
   "commits": ["a1b2c3d"],
-  "related": [
-    { "id": "src-auth-middleware-rs", "file": "src/auth/middleware.rs", "tab": "features" }
-  ],
+  "related": ["src/auth/middleware.rs"],
   "breaking": false,
   "context": "New file defining JWT claim types for the token refresh flow.",
   "before": null,
@@ -260,15 +241,13 @@ Derive from the file path: replace `/` and `.` with `-`. Example: `src/pages/ite
 **Deleted file:**
 ```json
 {
-  "id": "src-legacy-auth-rs",
   "file": "src/legacy_auth.rs",
   "status": "deleted",
   "desc": "Remove deprecated basic-auth module",
-  "complexity": { "added": 0, "removed": 87 },
+  "added": 0,
+  "removed": 87,
   "commits": ["f4e5d6c"],
-  "related": [
-    { "id": "src-auth-middleware-rs", "file": "src/auth/middleware.rs", "tab": "features" }
-  ],
+  "related": ["src/auth/middleware.rs"],
   "breaking": true,
   "breakingDetail": "Any service calling <code>legacy_auth::check_password()</code> will fail to compile.",
   "context": "This module provided HTTP Basic Auth, superseded by JWT auth in v2.0.",
@@ -292,16 +271,14 @@ Derive from the file path: replace `/` and `.` with `-`. Example: `src/pages/ite
 **Renamed file:**
 ```json
 {
-  "id": "src-validation-user-rs",
   "file": "src/validation/user.rs",
   "status": "renamed",
   "oldFile": "src/handlers/user_validation.rs",
   "desc": "Move user validation to shared module",
-  "complexity": { "added": 4, "removed": 2 },
+  "added": 4,
+  "removed": 2,
   "commits": ["b7c8d9e"],
-  "related": [
-    { "id": "src-handlers-users-rs", "file": "src/handlers/users.rs", "tab": "refactors" }
-  ],
+  "related": ["src/handlers/users.rs"],
   "breaking": false,
   "context": "Relocated from handlers to a dedicated validation module.",
   "before": {
