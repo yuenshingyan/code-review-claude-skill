@@ -11,7 +11,7 @@ A Claude Code skill that generates interactive visual code reviews as self-conta
 - **Review checklist**: Toggleable pills (Tests, Error handling, Docs, Security) per section
 - **Reviewer notes**: Per-section text area, persisted in localStorage
 - **Keyboard shortcuts**: `j`/`k` navigate, `e` expand, `x` cycle status, `n` next unreviewed
-- **Command palette**: `/` or `Cmd+K` for fuzzy search across all sections
+- **Command palette**: `/` or `Cmd+K` (`Ctrl+K` on Windows/Linux) for fuzzy search across all sections
 - **Export**: Copy all reviewed sections with statuses and notes as structured markdown
 - **Deep linking**: URL hash reflects current tab and section
 - **Related changes**: Clickable pills linking between related files
@@ -21,22 +21,46 @@ A Claude Code skill that generates interactive visual code reviews as self-conta
 
 Clone this repo directly into your Claude Code skills directory:
 
+**macOS / Linux:**
+
 ```bash
 git clone https://github.com/yuenshingyan/code-review-claude-skill ~/.claude/skills/code-review
 ```
 
-That's it. Claude Code auto-discovers skills in `~/.claude/skills/`.
+**Windows (PowerShell):**
+
+```powershell
+git clone https://github.com/yuenshingyan/code-review-claude-skill "$env:USERPROFILE\.claude\skills\code-review"
+```
+
+That's it. Claude Code auto-discovers skills in `~/.claude/skills/` (`%USERPROFILE%\.claude\skills\` on Windows).
 
 ### Update
+
+**macOS / Linux:**
 
 ```bash
 cd ~/.claude/skills/code-review && git pull
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+cd "$env:USERPROFILE\.claude\skills\code-review"; git pull
+```
+
 ### Uninstall
+
+**macOS / Linux:**
 
 ```bash
 rm -rf ~/.claude/skills/code-review
+```
+
+**Windows (PowerShell):**
+
+```powershell
+Remove-Item -Recurse -Force "$env:USERPROFILE\.claude\skills\code-review"
 ```
 
 ## Usage
