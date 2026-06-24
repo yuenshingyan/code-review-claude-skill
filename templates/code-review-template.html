@@ -498,7 +498,8 @@ a.bc-path { text-decoration: none; }
   <span class="kbd-group"><kbd>n</kbd> <span class="kbd-label">next unreviewed</span></span>
   <span class="kbd-sep"></span>
   <span class="kbd-group"><kbd>/</kbd> <span class="kbd-label">palette</span></span>
-
+  <span class="kbd-sep"></span>
+  <span class="kbd-group"><kbd>⌘K</kbd> <span class="kbd-label">palette</span></span>
 </div>
 <div class="cmd-palette-overlay" id="cmd-palette-overlay">
   <div class="cmd-palette">
@@ -518,30 +519,34 @@ a.bc-path { text-decoration: none; }
   var TAB_LABELS = { features: 'Features', fixes: 'Bug Fixes', refactors: 'Refactors', chores: 'Chores' };
   var STATUS_LABELS = { 'new': 'CREATED', modified: 'MODIFIED', deleted: 'DELETED', renamed: 'RENAMED' };
 
-  // Derive ID from file path
-  function deriveId(file) { return file.replace(/[\/\.]/g, '-'); }
-
-  // Build summary from sections + assign IDs
-  var fileTabMap = {};
-  data.summary = [];
-  for (var _tab in data.sections) {
-    data.sections[_tab].forEach(function(s) {
-      s.id = deriveId(s.file);
-      fileTabMap[s.file] = _tab;
-      data.summary.push({ id: s.id, file: s.file, tab: _tab, desc: s.desc, status: s.status || 'modified', added: s.added || 0, removed: s.removed || 0 });
+  // ── Auto-derive id, complexity, related, summary ──────────────
+  function fileToId(f) { return f.replace(/[\/\.\s\(\)]/g, '-'); }
+  var _lookup = {};
+  for (var _t in data.sections) {
+    data.sections[_t].forEach(function(s) {
+      if (!s.id) s.id = fileToId(s.file);
+      if (!s.complexity) s.complexity = { added: s.added || 0, removed: s.removed || 0 };
+      _lookup[s.file] = { id: s.id, tab: _t, file: s.file };
     });
   }
-  // Resolve related arrays (strings → objects)
-  for (var _tab2 in data.sections) {
-    data.sections[_tab2].forEach(function(s) {
-      if (s.related) {
+  for (var _t2 in data.sections) {
+    data.sections[_t2].forEach(function(s) {
+      if (s.related && s.related.length > 0) {
         s.related = s.related.map(function(r) {
-          if (typeof r === 'string') return { id: deriveId(r), file: r, tab: fileTabMap[r] || _tab2 };
-          if (!r.id) r.id = deriveId(r.file);
+          if (typeof r === 'string') return _lookup[r] || { id: fileToId(r), tab: _t2, file: r };
+          if (!r.id) r.id = fileToId(r.file || '');
           return r;
         });
       }
     });
+  }
+  if (!data.summary) {
+    data.summary = [];
+    for (var _t3 in data.sections) {
+      data.sections[_t3].forEach(function(s) {
+        data.summary.push({ id: s.id, file: s.file, desc: s.desc, tab: _t3, status: s.status || 'modified', added: s.added || 0, removed: s.removed || 0 });
+      });
+    }
   }
 
   var ICON_PENCIL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
@@ -740,7 +745,7 @@ a.bc-path { text-decoration: none; }
     html += '<span class="desc">\u2014 ' + esc(s.desc) + '</span>' +
       '<span class="section-right">' +
       '<span class="sr-breaking">' + (s.breaking ? '<span class="badge breaking">BREAKING</span>' : '') + '</span>' +
-      '<span class="sr-locs"><span class="badge complexity"><span class="stat-add">+' + (s.added || 0) + '</span> / <span class="stat-del">-' + (s.removed || 0) + '</span></span></span>' +
+      '<span class="sr-locs"><span class="badge complexity"><span class="stat-add">+' + s.complexity.added + '</span> / <span class="stat-del">-' + s.complexity.removed + '</span></span></span>' +
       '<span class="sr-commits">';
 
     // Commit pills
@@ -1180,12 +1185,17 @@ a.bc-path { text-decoration: none; }
         e.preventDefault();
         openPalette();
         break;
-      case 'k': // Prev section
-        if (e.metaKey || e.ctrlKey) break;
-        if (sections.length === 0) return;
-        idx = getFocusedSectionIndex(sections);
-        if (idx > 0) idx--;
-        sections[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      case 'k': // Command palette (Ctrl/Cmd+K)
+        if (e.metaKey || e.ctrlKey) {
+          e.preventDefault();
+          openPalette();
+        } else {
+          // Prev section (plain k)
+          if (sections.length === 0) return;
+          idx = getFocusedSectionIndex(sections);
+          if (idx > 0) idx--;
+          sections[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
         break;
     }
   });
