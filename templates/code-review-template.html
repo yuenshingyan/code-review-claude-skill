@@ -14,11 +14,11 @@ body {
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 13px; line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  padding: 32px 16px;
+  padding: 16px 0;
   scrollbar-gutter: stable;
   overflow-y: scroll;
 }
-.container { max-width: 1400px; margin: 0 auto; }
+.container { max-width: none; margin: 0; padding: 0 12px; }
 h1 { font-size: 20px; font-weight: 600; text-align: center; margin-bottom: 4px; }
 .subtitle { color: #4a5568; font-size: 12px; text-align: center; margin: -8px 0 8px; }
 .stats-bar {
@@ -192,12 +192,12 @@ details summary {
 details summary:hover { background: rgba(255,255,255,0.03); }
 details summary::-webkit-details-marker { display: none; }
 details summary::before {
-  content: '\25B8'; color: #4a5568; font-size: 11px; transition: transform 100ms ease-out, color 100ms ease-out;
+  content: '\25B8'; color: #4a5568; font-size: 16px; transition: transform 100ms ease-out, color 100ms ease-out;
   flex-shrink: 0;
 }
 details summary:hover::before { color: #8892a4; }
 details[open] summary::before { transform: rotate(90deg); }
-details > :not(summary) { padding: 0 12px; }
+details > div, details > p, details > h4, details > ul, details > .diff-columns, details > .diff-full, details > .key-ids, details > .related-changes, details > .breaking-detail, details > .note { padding: 0 12px; }
 .file-name { color: #4a9eff; text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 
 .desc { color: #8892a4; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
@@ -292,6 +292,8 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 .key-ids ul { list-style: none; padding: 0; }
 .key-ids li { font-size: 12px; color: #8892a4; padding: 2px 0; }
 .key-ids code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #e2e8f0; background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 2px; }
+.id-kind { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #4a9eff; text-transform: lowercase; }
+.id-type { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #4a5568; }
 
 /* Explanations */
 .explanation { font-size: 12px; color: #8892a4; line-height: 1.55; margin: 6px 0; }
@@ -303,13 +305,14 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
 
 /* Reviewer note */
 .reviewer-note {
-  display: block; width: 100%; box-sizing: border-box;
-  background: #1a1f28; border: 1px solid #3a4150; border-radius: 3px;
+  display: block; box-sizing: border-box;
+  width: calc(100% - 24px); margin: 8px 12px 12px 12px;
+  background: #0d1117; border: 1px solid #30363d; border-radius: 3px;
   color: #e2e8f0; font-family: 'IBM Plex Mono', monospace; font-size: 12px;
-  padding: 8px 10px; margin: 8px 0 4px 12px; resize: vertical; min-height: 28px;
+  padding: 8px 12px; resize: vertical; min-height: 32px;
 }
 .reviewer-note::placeholder { color: #4a5568; }
-.reviewer-note:focus { outline: 1px solid #4a9eff; outline-offset: -1px; }
+.reviewer-note:focus { outline: none; border-color: #4a9eff; }
 
 /* Keyboard bar */
 .kbd-bar {
@@ -497,7 +500,7 @@ a.bc-path { text-decoration: none; }
 .change-group > section.change:nth-child(even) { background: rgba(0, 0, 0, 0.3); }
 .change-group > section.change:not(:last-of-type) { border-bottom: 1px solid #1e2430; }
 .change-group > section.change .related-changes { display: none; }
-.change-group > section.change details > :not(summary) { padding: 0 20px; }
+.change-group > section.change details > div, details > p, details > h4, details > ul, details > .diff-columns, details > .diff-full, details > .key-ids, details > .related-changes, details > .breaking-detail, details > .note { padding: 0 12px; }
 .change-group.collapsed > section.change { display: none; }
 
 /* Review checklist pills */
@@ -760,7 +763,9 @@ a.bc-path { text-decoration: none; }
     if (!ids || ids.length === 0) return '';
     var html = '<div class="key-ids"><h5>Key identifiers</h5><ul>';
     ids.forEach(function(id) {
-      html += '<li><code>' + esc(id.name) + '</code> — ' + esc(id.desc) + '</li>';
+      var prefix = id.kind ? '<span class="id-kind">' + esc(id.kind) + '</span> ' : '';
+      var typeSuffix = id.type ? ' <span class="id-type">' + esc(id.type) + '</span>' : '';
+      html += '<li>' + prefix + '<code>' + esc(id.name) + '</code>' + typeSuffix + ' — ' + esc(id.desc) + '</li>';
     });
     html += '</ul></div>';
     return html;
@@ -770,8 +775,7 @@ a.bc-path { text-decoration: none; }
   function buildDiffCol(block, label) {
     return '<div class="diff-col"><h5>' + label + '</h5>' +
       buildCB(block.code) +
-      buildIds(block.identifiers) +
-      '<p class="explanation">' + block.explanation + '</p></div>';
+      buildIds(block.identifiers) + '</div>';
   }
 
   // Build sections
@@ -813,7 +817,6 @@ a.bc-path { text-decoration: none; }
     if (s.status === 'renamed' && s.oldFile) {
       html += '<p class="rename-from">Renamed from <code>' + esc(s.oldFile) + '</code></p>';
     }
-    html += '<p class="context">' + s.context + '</p>';
 
     // Related changes
     if (s.related && s.related.length > 0) {
@@ -841,18 +844,14 @@ a.bc-path { text-decoration: none; }
       if (s.before.identifiers && s.before.identifiers.length > 0) {
         html += buildIds(s.before.identifiers);
       }
-      if (s.before.explanation) {
-        html += '<p class="explanation">' + s.before.explanation + '</p>';
-      }
+
     } else if (s.after) {
       // Addition-only: show after block full-width
       html += '<div class="diff-full">' + buildCB(s.after.code) + '</div>';
       if (s.after.identifiers && s.after.identifiers.length > 0) {
         html += buildIds(s.after.identifiers);
       }
-      if (s.after.explanation) {
-        html += '<p class="explanation">' + s.after.explanation + '</p>';
-      }
+
     }
 
     if (s.note) {
@@ -861,12 +860,7 @@ a.bc-path { text-decoration: none; }
 
     html += '<h4 class="why-heading">Why this changed:</h4>' +
       '<p class="why">' + s.why + '</p>' +
-      '<ul class="review-checklist">' +
-      '<li><input type="checkbox" id="chk-tests-' + esc(s.id) + '" data-chk="tests" data-file="' + esc(s.id) + '"><label class="chk-pill" for="chk-tests-' + esc(s.id) + '">Tests</label></li>' +
-      '<li><input type="checkbox" id="chk-errors-' + esc(s.id) + '" data-chk="errors" data-file="' + esc(s.id) + '"><label class="chk-pill" for="chk-errors-' + esc(s.id) + '">Error handling</label></li>' +
-      '<li><input type="checkbox" id="chk-docs-' + esc(s.id) + '" data-chk="docs" data-file="' + esc(s.id) + '"><label class="chk-pill" for="chk-docs-' + esc(s.id) + '">Docs</label></li>' +
-      '<li><input type="checkbox" id="chk-security-' + esc(s.id) + '" data-chk="security" data-file="' + esc(s.id) + '"><label class="chk-pill" for="chk-security-' + esc(s.id) + '">Security</label></li>' +
-      '</ul>' +
+
       '<textarea class="reviewer-note" data-file="' + esc(s.id) + '" placeholder="Add a note..."></textarea>' +
       '</details></section>';
 
