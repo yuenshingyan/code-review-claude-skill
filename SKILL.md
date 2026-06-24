@@ -69,7 +69,7 @@ Add to the `skipped` array (don't create sections): lock files (`Cargo.lock`, `p
 
 ## Step 2 — Verify the template exists
 
-Run: `test -f ~/.claude/templates/code-review-template.html && echo OK || echo MISSING`
+Run: `test -f ~/.claude/skills/code-review/templates/code-review-template.html && echo OK || echo MISSING`
 
 If MISSING, report the error and stop. Do not read the file — Step 4's script handles injection directly.
 
@@ -218,7 +218,7 @@ import json, os
 with open('scratchpad/review.json') as f:
     data = json.load(f)
 
-tpl = os.path.expanduser('~/.claude/templates/code-review-template.html')
+tpl = os.path.expanduser('~/.claude/skills/code-review/templates/code-review-template.html')
 with open(tpl) as f:
     template = f.read()
 
