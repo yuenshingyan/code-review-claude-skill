@@ -1,6 +1,29 @@
 ---
 name: code-review
-description: Generate an interactive visual code review for changes since a given ref.
+description: >-
+  Generate an interactive visual code review and write it to an HTML
+  file. Multi-step: choose review mode, gather full diffs, read
+  changed files for context, analyze and produce structured JSON,
+  inject into HTML template via a single script.
+when_to_use: >-
+  TRIGGER when the user asks to "review my code", "code review",
+  "review changes", "review my diff", "review commits",
+  "visual code review", or similar. For GitHub PR reviews,
+  use /review instead.
+disable-model-invocation: true
+effort: max
+allowed-tools:
+  - Bash(git diff *)
+  - Bash(git log *)
+  - Bash(git status *)
+  - Bash(git show *)
+  - Bash(git symbolic-ref *)
+  - Bash(python3 *)
+  - Read
+  - Write
+  - AskUserQuestion
+disallowed-tools:
+  - Agent
 ---
 
 Generate an interactive visual code review and write it to an HTML file.
