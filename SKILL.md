@@ -215,11 +215,11 @@ Run as a **single** script:
 python3 - <<'EOF'
 import json, os
 
-with open('scratchpad/review.json') as f:
+with open('scratchpad/review.json', encoding='utf-8') as f:
     data = json.load(f)
 
 tpl = os.path.expanduser('~/.claude/skills/code-review/templates/code-review-template.html')
-with open(tpl) as f:
+with open(tpl, encoding='utf-8') as f:
     template = f.read()
 
 json_str = json.dumps(data, ensure_ascii=False)
@@ -229,7 +229,7 @@ result = template.replace(
 
 assert json_str in result, "injection failed"
 
-with open('code-review.html', 'w') as f:
+with open('code-review.html', 'w', encoding='utf-8') as f:
     f.write(result)
 
 print(f"Done: {len(result)} bytes, sections: {({k: len(v) for k, v in data.get('sections', {}).items()})}")
