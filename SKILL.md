@@ -62,7 +62,7 @@ If the file does not exist, report the error and stop.
 
 ## Step 3 — Produce the review JSON
 
-Analyze the diffs from Step 1 and produce a JSON object matching the schema below. This is the only content you generate — the template handles all rendering.
+Analyze the diffs from Step 1 and produce a JSON object matching the schema below. Write it to `scratchpad/review.json`. This is the only content you generate — the template handles all rendering.
 
 ### Tab classification
 
@@ -299,11 +299,33 @@ Omit any tab key from `sections` that has zero entries.
 }
 ```
 
-## Step 4 — Assemble and write the output file
+## Step 4 — Validate, inject, and write the output file
 
-1. Read the template from Step 2.
-2. In the template, find `<script id="review-data" type="application/json">{}</script>` and replace the `{}` with the JSON from Step 3.
-3. Write the result to `code-review.html` in the project root.
+Do this in a **single** script — do not validate and inject in separate steps:
+
+```python
+python3 - <<'EOF'
+import json
+
+with open('scratchpad/review.json') as f:
+    data = json.load(f)  # validates JSON implicitly
+
+with open('~/.claude/templates/code-review-template.html') as f:
+    template = f.read()
+
+json_str = json.dumps(data, ensure_ascii=False)
+result = template.replace(
+    '<script id="review-data" type="application/json">{}</script>',
+    f'<script id="review-data" type="application/json">{json_str}</script>')
+
+assert json_str in result, "injection failed"
+
+with open('code-review.html', 'w') as f:
+    f.write(result)
+
+print(f"Done: {len(result)} bytes, sections: {({k: len(v) for k, v in data.get('sections', {}).items()})}")
+EOF
+```
 
 ## Step 5 — Report
 
@@ -312,6 +334,8 @@ Tell the user the path and a one-line summary of how many changes were documente
 ## Template features reference
 
 The template provides these interactive features automatically — no extra data needed:
+
+- **Syntax highlighting (opt-in)**: Code blocks output `<code class="language-xxx">` based on file extension. To enable colored syntax, users add Prism.js (or any compatible library) to the template's `<head>`. See the HTML comment in the template for setup instructions. Without it, code renders as plain monospace — no errors.
 
 - **Tabbed navigation**: Summary, Features, Bug Fixes, Refactors, Chores, Commits (timeline), Skipped files
 - **Summary table**: File, status badge, tab, description, churn (+N / -N)
@@ -323,7 +347,7 @@ The template provides these interactive features automatically — no extra data
 - **Reviewer notes**: Per-section text area, persisted in localStorage
 - **Note indicator**: Pencil icon on collapsed sections that have a note
 - **Commit timeline**: Vertical timeline with dots, commit info, and file pills linking to sections
-- **Command palette**: `⌘K` / `Ctrl+K` or `/` opens fuzzy search across all sections and tabs
+- **Command palette**: `/` opens fuzzy search across all sections and tabs
 - **Keyboard shortcuts**: `j`/`k` navigate, `e` expand, `x` cycle status, `n` next unreviewed
 - **Deep linking**: URL hash reflects current tab and section (`#features/src-auth-middleware-rs`)
 - **Export**: Copies all sections with statuses/notes as structured markdown — includes full code context for use in PR comments or coding agent prompts
