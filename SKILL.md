@@ -150,10 +150,10 @@ Omit any tab key with zero entries.
 - **No `id` or `summary` needed.** The template derives both automatically.
 - **`commits` (top-level):** Newest-first. Omit entirely for Mode A.
 - **`commits` (per-section):** Short hashes of commits touching this file. Omit for Mode A.
-- **`related`:** Array of file path strings. Detect from: imports, caller→callee, same-commit co-changes, migration+schema pairs, test+implementation pairs. 1–3 links per section max. The template resolves them to clickable links.
+- **`related`:** Array of file path strings. Detect from: imports, caller→callee, same-commit co-changes, migration+schema pairs, test+implementation pairs. 1–3 links per section max. The template automatically groups related sections into a collapsible visual container — no extra markup needed.
 - **`code.line`:** Actual source line number from diff hunk headers. Use `""` for separator/comment lines in grouped sections.
 - **`breaking`:** Only for genuine caller-breaking changes: renamed function, changed signature, removed parameter/feature, changed return type/default. Not for new features, bug fixes, or internal refactors.
-- **Rich text:** `context`, `breakingDetail`, `note`, `explanation`, `why` may contain `<code>`, `<strong>`, `<em>`. No other HTML.
+- **Rich text:** `breakingDetail`, `note`, `why` may contain `<code>`, `<strong>`, `<em>`. No other HTML.
 
 ### Content quality rules
 
@@ -170,7 +170,7 @@ Omit any tab key with zero entries.
   { "line": "", "text": "// … 4 more similar fee additions", "type": "context" }
   ```
 - **One logical change per snippet.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), do NOT concatenate them into a single code block. Each hunk is a distinct change — show each one in its own snippet. Split the file into multiple section entries (same `file` path, different `desc`/`before`/`after`/`why` for each change). This prevents unrelated changes from appearing as one continuous block and lets each change have its own explanation.
-- Key identifiers should cover types, functions, fields a newcomer needs defined. Skip trivial ones (`i`, `db`, `Ok`).
+- Key identifiers should cover types, functions, fields a newcomer needs defined. Skip trivial ones (`i`, `db`, `Ok`). Include `kind` (function, variable, interface, type, class, const, enum) and `type` (type signature) when available — these help reviewers understand what each identifier is at a glance.
 - `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - For deleted files: `after: null`, populate `before` with key removed code using `"removed"` type.
 - For renamed files: include `oldFile`. Template shows "Renamed from …" automatically.
