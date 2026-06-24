@@ -1102,22 +1102,34 @@ a.bc-path { text-decoration: none; }
   // Next unreviewed
   document.getElementById('next-unreviewed').addEventListener('click', goToNextUnreviewed);
   function goToNextUnreviewed() {
-    var unchecked = root.querySelectorAll('.status-group:not([data-status="approved"]):not([data-status="rejected"]):not([data-status="concern"])');
+    var unchecked = Array.from(root.querySelectorAll('.status-group:not([data-status="approved"]):not([data-status="rejected"]):not([data-status="concern"])'));
     if (unchecked.length === 0) {
       showToast('All sections reviewed ✓');
       return;
     }
-    // Find the first unchecked that's in a visible tab-panel
+    // Split into items below vs above current scroll position, so 'n'
+    // advances forward and wraps around only when nothing is ahead.
+    var scrollY = window.scrollY || document.documentElement.scrollTop;
+    var ahead = [];
+    var behind = [];
     for (var i = 0; i < unchecked.length; i++) {
       var section = unchecked[i].closest('section.change');
-      var panel = section.closest('.tab-panel');
-      if (panel) {
-        switchTab(panel.dataset.tab);
-        section.querySelector('details').open = true;
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
+      if (!section || !section.closest('.tab-panel')) continue;
+      var top = section.getBoundingClientRect().top + scrollY;
+      if (top > scrollY + 50) {
+        ahead.push(unchecked[i]);
+      } else {
+        behind.push(unchecked[i]);
       }
     }
+    var target = (ahead.length > 0 ? ahead : behind)[0];
+    if (!target) return;
+    var section = target.closest('section.change');
+    var panel = section.closest('.tab-panel');
+    switchTab(panel.dataset.tab);
+    section.querySelector('details').open = true;
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (ahead.length === 0) showToast('Wrapped to top');
   }
 
   // Keyboard shortcuts
