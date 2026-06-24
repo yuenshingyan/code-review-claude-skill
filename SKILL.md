@@ -30,116 +30,101 @@ Generate an interactive visual code review and write it to an HTML file.
 
 ## Step 0 — Choose review mode
 
-Use the `AskUserQuestion` tool to present a dialog with the following question:
+Use `AskUserQuestion` with header "Review mode", question "What would you like to review?", options:
 
-- Question: "What would you like to review?"
-- Header: "Review mode"
-- Options:
-  1. Label: "Uncommitted changes" — Description: "Review working tree and staged changes (git diff + git diff --cached)"
-  2. Label: "Commits since main" — Description: "Review all commits on this branch since main"
-  3. Label: "Commits since ref" — Description: "Specify a base ref (branch, tag, or commit hash) to diff against HEAD"
+1. **Uncommitted changes** — Review working tree and staged changes (git diff + git diff --cached)
+2. **Commits since main** — All commits on this branch since main
+3. **Commits since ref** — Specify a base ref to diff against HEAD
 
-If the user selects **"Uncommitted changes"**, proceed with Mode A.
-If the user selects **"Commits since main"**, proceed with Mode B with base = `main`. Detect the default branch first: run `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'` — if it returns `master` or another name, use that instead of `main`.
-If the user selects **"Commits since ref"**, ask a follow-up: "Enter the base ref (e.g. HEAD~5, v1.2.0, abc1234):" — then proceed with Mode B using that ref.
-If the user selects **"Other"** and provides custom text, treat it as a base ref and proceed with Mode B.
+- Option 1 → Mode A.
+- Option 2 → Mode B. Detect default branch first: `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'` — use result if it differs from `main`.
+- Option 3 → ask follow-up for the ref, then Mode B.
+- Custom text → treat as base ref, Mode B.
 
 ## Step 1 — Gather changes
 
-**Mode A — Uncommitted changes:**
-1. Run `git diff --stat` and `git diff --cached --stat` to get modified files.
-2. Run `git diff --shortstat` and `git diff --cached --shortstat` to get the summary line (files changed, insertions, deletions) for the stats bar.
-3. Run `git diff` and `git diff --cached` to read the actual diffs.
-4. For large diffs, read the changed files directly to understand context.
-5. Record the scope label: `uncommitted changes`.
+**Mode A (uncommitted):**
+1. `git diff --stat` + `git diff --cached --stat` → modified files.
+2. `git diff --shortstat` + `git diff --cached --shortstat` → stats bar numbers.
+3. `git diff` + `git diff --cached` → actual diffs.
+4. Read changed files directly for large diffs needing context.
+5. Scope label: `uncommitted changes`.
 
-**Mode B — Committed changes:**
-1. Run `git diff <base>...HEAD --stat -M` to get the list of changed files and their churn. The `-M` flag detects renames.
-2. Run `git diff <base>...HEAD --shortstat` to get the summary line for the stats bar.
-3. Run `git log <base>..HEAD --oneline --format="%h %s|%an|%ad" --date=short` to get the commit history with author and date.
-4. For each commit, run `git show <hash> --stat` and read the diff to understand what changed and why.
-5. Record the scope label: `<base>..HEAD (N commits)`.
+**Mode B (committed):**
+1. `git diff <base>...HEAD --stat -M` → changed files + churn (`-M` detects renames).
+2. `git diff <base>...HEAD --shortstat` → stats bar numbers.
+3. `git log <base>..HEAD --oneline --format="%h %s|%an|%ad" --date=short` → commit history.
+4. For each commit, `git show <hash> --stat` and read the diff.
+5. Scope label: `<base>..HEAD (N commits)`.
 
 ### Skip list
 
-Skip the following files — do not create sections for them. Instead, add them to the `skipped` array with a reason:
-
-- Lock files: `Cargo.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Gemfile.lock`, `poetry.lock`, `composer.lock`
-- Generated code: protobuf outputs (`*.pb.go`, `*.pb.rs`, `*_pb2.py`), GraphQL generated files, OpenAPI generated clients
-- Vendored dependencies: anything under `vendor/`, `third_party/`, `node_modules/`
-- Binary files: images, fonts, compiled assets
-
-If a skipped file has significant manual changes mixed in (e.g. a manually edited lock file), include it as a regular section instead.
+Add to the `skipped` array (don't create sections): lock files (`Cargo.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Gemfile.lock`, `poetry.lock`, `composer.lock`), generated code (protobuf, GraphQL, OpenAPI), vendored deps (`vendor/`, `third_party/`, `node_modules/`), binary files. Exception: include if significant manual changes are mixed in.
 
 ### Scale guidance
 
-- **≤15 files**: Create one section per file. Full detail on all.
-- **16–40 files**: Group trivially related files (e.g. a migration + its generated type) into single sections. Full detail on important changes, lighter on chores.
-- **>40 files**: Group aggressively. Summarize mechanical changes (renames, import updates) in a single section. Focus detail on the top ~20 most important changes.
+- **≤15 files**: One section per file, full detail.
+- **16–40 files**: Group trivially related files. Full detail on important changes, lighter on chores.
+- **>40 files**: Group aggressively. Summarize mechanical changes in one section. Focus on top ~20.
 
-## Step 2 — Read the template
+## Step 2 — Verify the template exists
 
-Read the template file at `~/.claude/templates/code-review-template.html`. This contains all CSS, HTML skeleton, and renderer JS. You will copy it verbatim and only fill in the JSON data slot.
+Run: `test -f ~/.claude/templates/code-review-template.html && echo OK || echo MISSING`
 
-If the file does not exist, report the error and stop.
+If MISSING, report the error and stop. Do not read the file — Step 4's script handles injection directly.
 
 ## Step 3 — Produce the review JSON
 
-Analyze the diffs from Step 1 and produce a JSON object matching the schema below. Write it to `scratchpad/review.json`. This is the only content you generate — the template handles all rendering.
+Analyze the diffs and produce JSON matching the schema below. Write to `scratchpad/review.json`.
 
 ### Tab classification
 
-Classify each change into exactly one tab:
-
-| Tab key | What belongs here |
+| Tab | Content |
 |---|---|
-| `features` | New functionality, new annotation types, new export formats, new UI capabilities |
-| `fixes` | Corrections to broken behavior, crash fixes, data integrity fixes |
-| `refactors` | Code restructuring that doesn't change behavior — renames, extractions, simplifications |
-| `chores` | Dependencies, config, CI, migrations, docs, type cleanups, dead code removal |
+| `features` | New functionality, capabilities, UI, formats |
+| `fixes` | Bug fixes, crash fixes, data integrity |
+| `refactors` | Restructuring without behavior change |
+| `chores` | Deps, config, CI, docs, type cleanup, dead code |
 
-Omit any tab key from `sections` that has zero entries.
+Omit any tab key with zero entries.
 
 ### JSON schema
 
 ```json
 {
   "title": "Code Review",
-  "projectName": "<project name from directory or Cargo.toml/package.json>",
+  "projectName": "<from directory or manifest>",
   "date": "YYYY-MM-DD",
   "scope": "<scope label from Step 1>",
-  "stats": { "files": <int>, "added": <int>, "deleted": <int> },
+  "stats": { "files": 0, "added": 0, "deleted": 0 },
   "commits": [
     {
-      "hash": "<short hash, 7 chars>",
-      "message": "<commit subject line>",
-      "author": "<author name>",
+      "hash": "<7-char short hash>",
+      "message": "<subject line>",
+      "author": "<name>",
       "date": "YYYY-MM-DD"
     }
   ],
   "skipped": [
-    {
-      "file": "<file path>",
-      "reason": "<why it was skipped, e.g. 'Auto-generated lock file (+1843 lines)'>"
-    }
+    { "file": "<path>", "reason": "<why skipped>" }
   ],
   "sections": {
     "<tab key>": [
       {
-        "file": "<display file path>",
+        "file": "<display path>",
         "status": "<new|modified|deleted|renamed>",
-        "oldFile": "<original path — only when status is 'renamed', otherwise omit>",
+        "oldFile": "<original path — only when status=renamed, else omit>",
         "desc": "<short description>",
-        "added": <int>,
-        "removed": <int>,
-        "commits": ["<short hash>"],
+        "added": 0,
+        "removed": 0,
+        "commits": ["<short hash — omit array for Mode A>"],
         "related": ["<file path>"],
-        "breaking": <bool>,
-        "breakingDetail": "<what breaks — only when breaking is true, otherwise omit>",
-        "context": "<2-3 sentences: what this file does, what the changed code does, background for a reviewer>",
+        "breaking": false,
+        "breakingDetail": "<what breaks — only when breaking=true, else omit>",
+        "context": "<2-3 sentences: what this file does, what changed, reviewer background>",
         "note": "<optional 'Also in this diff' note — omit if not needed>",
-        "before": <BeforeBlock or null>,
-        "after": <AfterBlock or null>,
+        "before": "<BeforeAfterBlock or null (null for new files)>",
+        "after": "<BeforeAfterBlock or null (null for deleted files)>",
         "why": "<one paragraph: motivation, not description>"
       }
     ]
@@ -147,11 +132,11 @@ Omit any tab key from `sections` that has zero entries.
 }
 ```
 
-**BeforeBlock / AfterBlock:**
+**BeforeAfterBlock:**
 ```json
 {
   "code": [
-    { "line": <int or "">, "text": "<source line>", "type": "<context|added|removed>" }
+    { "line": "<int or empty string>", "text": "<source line>", "type": "<context|added|removed>" }
   ],
   "identifiers": [
     { "name": "<identifier>", "desc": "<what it is>" }
@@ -162,37 +147,24 @@ Omit any tab key from `sections` that has zero entries.
 
 ### Field rules
 
-- **No `id` fields needed.** The template derives section IDs automatically from file paths (replacing `/` and `.` with `-`).
-- **No `summary` array needed.** The template builds the summary table automatically from `sections`.
-- **`status`**: Required on each section. One of `"new"` (file created), `"modified"` (file changed), `"deleted"` (file removed), `"renamed"` (file moved/renamed). Detect renames from `git diff -M` output.
-- **`oldFile`**: Only include when `status` is `"renamed"`. The original file path before the rename.
-- **`added`** / **`removed`**: Lines added/removed for this file. Shown in the summary churn column and section header.
-- **`commits`** (top-level): Array of all commits in the review range (Mode B only). Ordered newest-first. Each entry has `hash`, `message`, `author`, `date`. Omit for Mode A.
-- **`commits`** (per-section): Array of short commit hashes that touched this file. Derived from `git log` output. Omit for Mode A.
-- **`skipped`**: Array of files that were excluded from review. Each entry has `file` and `reason`. Omit if nothing was skipped.
-- **`related`**: Array of related file paths (strings, not objects) — files that import, call, or are tightly coupled with this one. The template resolves them to section links automatically. Detect relationships from: import statements, function calls across files, files changed in the same commit for the same purpose, migration + schema pairs, test + implementation pairs. Omit if no relationships detected.
-- **`before`**: Set to `null` for purely additive sections (new file, new function, new match arm). The renderer will use full-width layout for the `after` block.
-- **`after`**: Set to `null` for deletion-only sections (file removed). The renderer will use full-width layout for the `before` block, showing all removed code.
-- **`breakingDetail`**: Only include when `breaking` is `true`. Explain specifically what breaks: which callers, consumers, or behavior changes.
-- **`note`**: Optional. Use for "Also in this diff" notes when a section covers multiple changes in the same file.
-- **`codeLine.line`**: Use the actual source line number from diff hunk headers. Use `""` (empty string) for separator/comment lines in multi-file grouped sections.
-- **`codeLine.type`**: `"context"` for unchanged lines, `"added"` for new/changed lines, `"removed"` for deleted lines.
-- **Rich text**: The fields `context`, `breakingDetail`, `note`, `explanation`, and `why` may contain inline `<code>`, `<strong>`, and `<em>` HTML tags. No other HTML.
+- **No `id` or `summary` needed.** The template derives both automatically.
+- **`commits` (top-level):** Newest-first. Omit entirely for Mode A.
+- **`commits` (per-section):** Short hashes of commits touching this file. Omit for Mode A.
+- **`related`:** Array of file path strings. Detect from: imports, caller→callee, same-commit co-changes, migration+schema pairs, test+implementation pairs. 1–3 links per section max. The template resolves them to clickable links.
+- **`code.line`:** Actual source line number from diff hunk headers. Use `""` for separator/comment lines in grouped sections.
+- **`breaking`:** Only for genuine caller-breaking changes: renamed function, changed signature, removed parameter/feature, changed return type/default. Not for new features, bug fixes, or internal refactors.
+- **Rich text:** `context`, `breakingDetail`, `note`, `explanation`, `why` may contain `<code>`, `<strong>`, `<em>`. No other HTML.
 
 ### Content quality rules
 
-- Show enough surrounding context in each code snippet for the reader to orient themselves (the function signature, the match arm, etc.) — not just the changed line.
-- The key identifiers list should cover types, functions, fields, and variables a reader unfamiliar with the codebase would need defined. Skip trivial ones (`i`, `db`, `Ok`).
-- Keep explanations concise — one paragraph per block.
-- The `why` field is mandatory for every section. Derive the motivation from commit messages, PR context, code comments, or by reasoning about the bug/feature. Never leave it as a restatement of the "what" — it must answer *why was this change necessary?*
-- Add `breaking: true` only when the change genuinely breaks callers or existing behavior: renamed function, changed function signature, removed parameter, changed default value, removed feature, changed return type. Do not add it for new features, bug fixes, or internal refactors.
-- For deleted files (`status: "deleted"`), set `after: null` and populate `before` with the key code that was removed, using `"removed"` type for all substantive lines.
-- For renamed files (`status: "renamed"`), include `oldFile` with the original path. The template shows "Renamed from <oldFile>" inside the expanded section.
-- For related changes, prioritize the strongest relationships: direct imports, caller→callee, test→implementation, migration→schema. Don't link every file to every other file — 1-3 related links per section is ideal.
+- Include enough surrounding context (function signature, match arm) for orientation — not just changed lines.
+- Key identifiers should cover types, functions, fields a newcomer needs defined. Skip trivial ones (`i`, `db`, `Ok`).
+- `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
+- For deleted files: `after: null`, populate `before` with key removed code using `"removed"` type.
+- For renamed files: include `oldFile`. Template shows "Renamed from …" automatically.
 
-### Example sections
+### Example section (modified file)
 
-**Modified file with related changes:**
 ```json
 {
   "file": "src/auth/middleware.rs",
@@ -231,109 +203,23 @@ Omit any tab key from `sections` that has zero entries.
 }
 ```
 
-**New file:**
-```json
-{
-  "file": "src/auth/claims.rs",
-  "status": "new",
-  "desc": "New RefreshClaim type and validation",
-  "added": 38,
-  "removed": 0,
-  "commits": ["a1b2c3d"],
-  "related": ["src/auth/middleware.rs"],
-  "breaking": false,
-  "context": "New file defining JWT claim types for the token refresh flow.",
-  "before": null,
-  "after": {
-    "code": [
-      { "line": 1, "text": "pub struct RefreshClaim {", "type": "added" },
-      { "line": 2, "text": "    pub sub: String,", "type": "added" },
-      { "line": 3, "text": "    pub refresh_count: u32,", "type": "added" },
-      { "line": 4, "text": "}", "type": "added" }
-    ],
-    "identifiers": [
-      { "name": "RefreshClaim", "desc": "JWT claim tracking refresh state" },
-      { "name": "refresh_count", "desc": "Prevents infinite refresh chains" }
-    ],
-    "explanation": "New type that enforces a ceiling on consecutive refreshes."
-  },
-  "why": "Without a bounded refresh count, a compromised token could be refreshed indefinitely."
-}
-```
+For `status: "new"` → set `before: null`, all code lines use type `"added"`.
+For `status: "deleted"` → set `after: null`, all code lines use type `"removed"`.
+For `status: "renamed"` → add `"oldFile": "<original path>"`.
 
-**Deleted file:**
-```json
-{
-  "file": "src/legacy_auth.rs",
-  "status": "deleted",
-  "desc": "Remove deprecated basic-auth module",
-  "added": 0,
-  "removed": 87,
-  "commits": ["f4e5d6c"],
-  "related": ["src/auth/middleware.rs"],
-  "breaking": true,
-  "breakingDetail": "Any service calling <code>legacy_auth::check_password()</code> will fail to compile.",
-  "context": "This module provided HTTP Basic Auth, superseded by JWT auth in v2.0.",
-  "before": {
-    "code": [
-      { "line": 3, "text": "pub fn check_password(user: &str, pass: &str) -> bool {", "type": "removed" },
-      { "line": 4, "text": "    let stored = get_stored_hash(user);", "type": "removed" },
-      { "line": 5, "text": "    verify(pass, &stored).unwrap_or(false)", "type": "removed" },
-      { "line": 6, "text": "}", "type": "removed" }
-    ],
-    "identifiers": [
-      { "name": "check_password", "desc": "Legacy password verification against hardcoded bcrypt hashes" }
-    ],
-    "explanation": "The entire module is removed."
-  },
-  "after": null,
-  "why": "Dead auth code creates confusion about which auth path is canonical and increases security audit surface."
-}
-```
+## Step 4 — Validate, inject, and write
 
-**Renamed file:**
-```json
-{
-  "file": "src/validation/user.rs",
-  "status": "renamed",
-  "oldFile": "src/handlers/user_validation.rs",
-  "desc": "Move user validation to shared module",
-  "added": 4,
-  "removed": 2,
-  "commits": ["b7c8d9e"],
-  "related": ["src/handlers/users.rs"],
-  "breaking": false,
-  "context": "Relocated from handlers to a dedicated validation module.",
-  "before": {
-    "code": [
-      { "line": 1, "text": "use crate::handlers::types::CreateUser;", "type": "removed" }
-    ],
-    "identifiers": [],
-    "explanation": "Import path referenced the old module location."
-  },
-  "after": {
-    "code": [
-      { "line": 1, "text": "use crate::types::CreateUser;", "type": "added" }
-    ],
-    "identifiers": [],
-    "explanation": "Updated to the new crate-level types module."
-  },
-  "why": "Validation logic buried in handlers was hard to discover and reuse."
-}
-```
-
-## Step 4 — Validate, inject, and write the output file
-
-Do this in a **single** script — do not validate and inject in separate steps:
+Run as a **single** script:
 
 ```python
 python3 - <<'EOF'
-import json
+import json, os
 
 with open('scratchpad/review.json') as f:
-    data = json.load(f)  # validates JSON implicitly
+    data = json.load(f)
 
-with open('~/.claude/templates/code-review-template.html') as f:
+tpl = os.path.expanduser('~/.claude/templates/code-review-template.html')
+with open(tpl) as f:
     template = f.read()
 
 json_str = json.dumps(data, ensure_ascii=False)
@@ -352,28 +238,4 @@ EOF
 
 ## Step 5 — Report
 
-Tell the user the path and a one-line summary of how many changes were documented.
-
-## Template features reference
-
-The template provides these interactive features automatically — no extra data needed:
-
-- **Syntax highlighting (opt-in)**: Code blocks output `<code class="language-xxx">` based on file extension. To enable colored syntax, users add Prism.js (or any compatible library) to the template's `<head>`. See the HTML comment in the template for setup instructions. Without it, code renders as plain monospace — no errors.
-
-- **Tabbed navigation**: Summary, Features, Bug Fixes, Refactors, Chores, Commits (timeline), Skipped files
-- **Summary table**: File, status badge, tab, description, churn (+N / -N)
-- **Section headers**: Status badge, breadcrumb file path, description, LOCs, BREAKING badge, commit pills, copy-as-context button, review status group
-- **Side-by-side diffs**: Before/after with syntax-colored added/removed lines; full-width for new/deleted files
-- **Related changes**: Clickable pills linking between related sections
-- **Review status**: Per-section approve (✓) / reject (✗) / concern (⚠) toggles, persisted in localStorage
-- **Review checklist**: Per-section toggleable pills (Tests, Error handling, Docs, Security), persisted in localStorage
-- **Reviewer notes**: Per-section text area, persisted in localStorage
-- **Note indicator**: Pencil icon on collapsed sections that have a note
-- **Commit timeline**: Vertical timeline with dots, commit info, and file pills linking to sections
-- **Command palette**: `/` opens fuzzy search across all sections and tabs
-- **Keyboard shortcuts**: `j`/`k` navigate, `e` expand, `x` cycle status, `n` next unreviewed
-- **Deep linking**: URL hash reflects current tab and section (`#features/src-auth-middleware-rs`)
-- **Export**: Copies all sections with statuses/notes as structured markdown — includes full code context for use in PR comments or coding agent prompts
-- **Copy section**: Per-section button copies that section as structured markdown context
-- **Scroll breadcrumb**: Sticky bar showing current tab and section while scrolling
-- **Print stylesheet**: Light backgrounds, all panels expanded, controls hidden
+Tell the user the output path and a one-line summary of how many changes were documented.
