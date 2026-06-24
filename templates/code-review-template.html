@@ -524,12 +524,17 @@ a.bc-path { text-decoration: none; }
 
   // ── Auto-derive id, complexity, related, summary ──────────────
   function fileToId(f) { return f.replace(/[\/\.\s\(\)]/g, '-'); }
+  var _idCount = {};
   var _lookup = {};
   for (var _t in data.sections) {
     data.sections[_t].forEach(function(s) {
-      if (!s.id) s.id = fileToId(s.file);
+      if (!s.id) {
+        var base = fileToId(s.file);
+        _idCount[base] = (_idCount[base] || 0) + 1;
+        s.id = _idCount[base] > 1 ? base + '--' + _idCount[base] : base;
+      }
       if (!s.complexity) s.complexity = { added: s.added || 0, removed: s.removed || 0 };
-      _lookup[s.file] = { id: s.id, tab: _t, file: s.file };
+      if (!_lookup[s.file]) _lookup[s.file] = { id: s.id, tab: _t, file: s.file };
     });
   }
   for (var _t2 in data.sections) {
