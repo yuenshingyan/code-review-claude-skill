@@ -515,6 +515,9 @@ a.bc-path { text-decoration: none; }
 <script>
 (function() {
   var data = JSON.parse(document.getElementById('review-data').textContent);
+  Object.keys(localStorage).forEach(function(k) {
+    if (k.startsWith('code-review:')) localStorage.removeItem(k);
+  });
   var root = document.getElementById('cr-root');
   var TAB_LABELS = { features: 'Features', fixes: 'Bug Fixes', refactors: 'Refactors', chores: 'Chores' };
   var STATUS_LABELS = { 'new': 'CREATED', modified: 'MODIFIED', deleted: 'DELETED', renamed: 'RENAMED' };
