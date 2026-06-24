@@ -158,6 +158,7 @@ Omit any tab key with zero entries.
 ### Content quality rules
 
 - Include enough surrounding context (function signature, match arm) for orientation — not just changed lines.
+- **Never drop lines from the middle of a code block.** Every line between the first and last line of a snippet must be present — no silent omissions. If a diff hunk shows 12 lines, the code array must have all 12. Especially watch for multi-branch constructs (`if/else`, `match`, `try/catch`): include every branch in full, not just the first arm.
 - Key identifiers should cover types, functions, fields a newcomer needs defined. Skip trivial ones (`i`, `db`, `Ok`).
 - `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - For deleted files: `after: null`, populate `before` with key removed code using `"removed"` type.
