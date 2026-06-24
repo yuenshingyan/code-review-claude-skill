@@ -462,6 +462,44 @@ a.bc-path { text-decoration: none; }
 .related-pill:hover { color: #7abdff; border-color: rgba(74, 158, 255, 0.4); background: rgba(74, 158, 255, 0.1); }
 .related-label { color: #4a5568; font-size: 10px; font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.3px; margin-right: 4px; align-self: center; }
 
+/* Grouped related changes */
+.change-group {
+  margin-bottom: 16px; border: 1px solid rgba(74, 158, 255, 0.2); border-radius: 0;
+  border-left: 3px solid #4a9eff; background: rgba(74, 158, 255, 0.015);
+  transition: border-left-color 200ms ease-out;
+}
+.change-group[data-group-status="approved"] { border-left-color: #4ade80; }
+.change-group[data-group-status="rejected"] { border-left-color: #f87171; }
+.change-group[data-group-status="concern"] { border-left-color: #fbbf24; }
+.change-group[data-group-status="mixed"] { border-left-color: #8892a4; }
+.change-group-header {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  background: rgba(74, 158, 255, 0.06); border-bottom: 1px solid rgba(74, 158, 255, 0.15);
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  color: #8892a4; text-transform: uppercase; letter-spacing: 0.5px;
+  cursor: pointer; user-select: none; transition: background 100ms ease-out;
+}
+.change-group-header:hover { background: rgba(74, 158, 255, 0.1); }
+.change-group-header .group-toggle-hint {
+  font-size: 9px; color: #4a5568; margin-left: auto; opacity: 0;
+  transition: opacity 100ms ease-out;
+}
+.change-group-header:hover .group-toggle-hint { opacity: 1; }
+.change-group.collapsed .change-group-header .group-toggle-hint { opacity: 0.6; }
+.change-group-header svg { flex-shrink: 0; color: #4a9eff; opacity: 0.7; }
+.change-group-header .group-chevron {
+  color: #4a5568; font-size: 11px; transition: transform 100ms ease-out;
+}
+.change-group.collapsed .group-chevron { transform: rotate(-90deg); }
+.change-group-count { color: #4a9eff; font-weight: 500; }
+.change-group > section.change { margin-bottom: 0; border-left: none; background: transparent; }
+.change-group > section.change:nth-child(odd) { background: transparent; }
+.change-group > section.change:nth-child(even) { background: rgba(0, 0, 0, 0.3); }
+.change-group > section.change:not(:last-of-type) { border-bottom: 1px solid #1e2430; }
+.change-group > section.change .related-changes { display: none; }
+.change-group > section.change details > :not(summary) { padding: 0 20px; }
+.change-group.collapsed > section.change { display: none; }
+
 /* Review checklist pills */
 .review-checklist {
   margin: 8px 0; padding: 0 0 0 12px; list-style: none;
@@ -835,12 +873,52 @@ a.bc-path { text-decoration: none; }
     return html;
   }
 
+  // ── Group related sections via union-find ──
+  function buildGroups(sections) {
+    var idToIdx = {};
+    sections.forEach(function(s, i) { idToIdx[s.id] = i; });
+    var parent = sections.map(function(_, i) { return i; });
+    function find(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+    function union(a, b) { var ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; }
+    sections.forEach(function(s, i) {
+      if (s.related) {
+        s.related.forEach(function(r) {
+          var j = idToIdx[r.id];
+          if (j != null) union(i, j);
+        });
+      }
+    });
+    var groups = {};
+    sections.forEach(function(s, i) {
+      var root = find(i);
+      if (!groups[root]) groups[root] = [];
+      groups[root].push(s);
+    });
+    var seen = {}; var result = [];
+    sections.forEach(function(s, i) {
+      var root = find(i);
+      if (!seen[root]) { seen[root] = true; result.push(groups[root]); }
+    });
+    return result;
+  }
+
+  var ICON_LINK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+
   // Tab panels
   var panelsHTML = '';
   tabOrder.forEach(function(t) {
     panelsHTML += '<div class="tab-panel" data-tab="' + t + '">';
-    data.sections[t].forEach(function(s) {
-      panelsHTML += buildSection(s);
+    var groups = buildGroups(data.sections[t]);
+    groups.forEach(function(group) {
+      if (group.length === 1) {
+        panelsHTML += buildSection(group[0]);
+      } else {
+        panelsHTML += '<div class="change-group" data-group-status="none">';
+        panelsHTML += '<div class="change-group-header"><span class="group-chevron">&#9656;</span>' + ICON_LINK +
+          ' <span>Related changes</span> <span class="change-group-count">' + group.length + ' files</span><span class="group-toggle-hint">click to collapse</span></div>';
+        group.forEach(function(s) { panelsHTML += buildSection(s); });
+        panelsHTML += '</div>';
+      }
     });
     panelsHTML += '</div>';
   });
@@ -947,9 +1025,39 @@ a.bc-path { text-decoration: none; }
       var sec = group.closest('section.change');
       if (sec) sec.dataset.status = next;
       updateProgress();
+      var changeGroup = sec.closest('.change-group');
+      if (changeGroup) updateGroupStatus(changeGroup);
     });
   });
   updateProgress();
+
+  // Group header collapse/expand
+  root.querySelectorAll('.change-group-header').forEach(function(header) {
+    header.addEventListener('click', function(e) {
+      // Don't collapse if clicking a child interactive element
+      if (e.target.closest('.status-opt')) return;
+      var group = header.closest('.change-group');
+      group.classList.toggle('collapsed');
+    });
+  });
+
+  // Aggregate group status from children
+  function updateGroupStatus(groupEl) {
+    var statuses = [];
+    groupEl.querySelectorAll(':scope > section.change').forEach(function(sec) {
+      var sg = sec.querySelector('.status-group');
+      var s = (sg && sg.dataset.status) || 'none';
+      if (s !== 'none') statuses.push(s);
+    });
+    if (statuses.length === 0) {
+      groupEl.dataset.groupStatus = 'none';
+    } else {
+      var allSame = statuses.every(function(s) { return s === statuses[0]; });
+      groupEl.dataset.groupStatus = allSame ? statuses[0] : 'mixed';
+    }
+  }
+  // Initialize group statuses
+  root.querySelectorAll('.change-group').forEach(function(g) { updateGroupStatus(g); });
 
   // Reviewer notes persistence + note indicator
   var noteTimer;
