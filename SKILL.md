@@ -159,13 +159,17 @@ Omit any tab key with zero entries.
 
 - Include enough surrounding context (function signature, match arm) for orientation — not just changed lines.
 - **Never drop lines from the middle of a code block.** Every line between the first and last line of a snippet must be present — no silent omissions. If a diff hunk shows 12 lines, the code array must have all 12. Especially watch for multi-branch constructs (`if/else`, `match`, `try/catch`): include every branch in full, not just the first arm.
-- **Use comment lines for narrative context** instead of showing extra source code. Insert synthetic comment entries (`"line": "", "type": "context"`) before or after changed lines to orient the reviewer. This keeps snippets focused on the actual change. Example:
+- **Synthetic comment lines** (`"line": "", "type": "context"`) serve exactly two purposes — no others:
+  1. **Orient the reader** by naming the enclosing scope before/after changed lines (e.g. `// inside send_report()`).
+  2. **Abbreviate large modified blocks** when the change adds or removes many repetitive lines. Show a representative sample of the actual changed lines and summarize the rest (e.g. `// … 4 more similar query arms`).
+  Never use synthetic comments to bridge the gap between separate hunks, to replace unchanged code between changes, or to substitute for changed lines that should be shown in full. Use `//` comments regardless of language — these are reviewer annotations, not real source. Example:
   ```json
-  { "line": "", "text": "// total is computed from per-item prices above", "type": "context" },
+  { "line": "", "text": "// inside calculate_invoice()", "type": "context" },
   { "line": 84, "text": "    let total = total + shipping_fee;", "type": "added" },
-  { "line": "", "text": "// total is returned to the caller and shown on the invoice", "type": "context" }
+  { "line": 85, "text": "    let total = total + handling_fee;", "type": "added" },
+  { "line": "", "text": "// … 4 more similar fee additions", "type": "context" }
   ```
-  Use `//` comments regardless of language — these are reviewer annotations, not real source.
+- **One logical change per snippet.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), do NOT concatenate them into a single code block. Each hunk is a distinct change — show each one in its own snippet. Split the file into multiple section entries (same `file` path, different `desc`/`before`/`after`/`why` for each change). This prevents unrelated changes from appearing as one continuous block and lets each change have its own explanation.
 - Key identifiers should cover types, functions, fields a newcomer needs defined. Skip trivial ones (`i`, `db`, `Ok`).
 - `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - For deleted files: `after: null`, populate `before` with key removed code using `"removed"` type.
@@ -209,6 +213,59 @@ Omit any tab key with zero entries.
   },
   "why": "Users were getting logged out mid-session when their token expired during long form submissions."
 }
+```
+
+**Multiple hunks in one file → multiple sections.** When a diff has separate hunks in the same file (e.g. a new helper at line 20 and a refactored query at line 95), emit one section per logical change. The template handles duplicate file paths by appending a suffix to the DOM id. Example — two sections for the same file:
+
+```json
+[
+  {
+    "file": "src/report/service.rs",
+    "status": "modified",
+    "desc": "Resolve recipient emails from user IDs",
+    "added": 6, "removed": 0,
+    "before": null,
+    "after": {
+      "code": [
+        { "line": "", "text": "// inside send_report()", "type": "context" },
+        { "line": 42, "text": "    let parsed_ids: Vec<i32> = recipient_ids.iter().filter_map(|s| s.parse::<i32>().ok()).collect();", "type": "added" },
+        { "line": 43, "text": "    let recipient_users = Users::Entity::find()", "type": "added" },
+        { "line": 44, "text": "        .filter(Users::Column::Id.is_in(parsed_ids))", "type": "added" },
+        { "line": 45, "text": "        .all(db).await.map_err(|e| e.to_string())?;", "type": "added" }
+      ],
+      "identifiers": [{ "name": "parsed_ids", "desc": "Validated i32 user IDs parsed from string input" }],
+      "explanation": "New block resolves recipient IDs to active user emails."
+    },
+    "why": "Callers were passing raw IDs; the report needs email addresses."
+  },
+  {
+    "file": "src/report/service.rs",
+    "status": "modified",
+    "desc": "Run report queries concurrently with try_join!",
+    "added": 12, "removed": 18,
+    "before": {
+      "code": [
+        { "line": "", "text": "// inside gather_report_data()", "type": "context" },
+        { "line": 95, "text": "    let new_count = query_new(db).await?;", "type": "removed" },
+        { "line": 96, "text": "    let resolved_count = query_resolved(db).await?;", "type": "removed" }
+      ],
+      "identifiers": [],
+      "explanation": "Queries ran sequentially — each awaited before the next."
+    },
+    "after": {
+      "code": [
+        { "line": "", "text": "// inside gather_report_data()", "type": "context" },
+        { "line": 95, "text": "    let (new_count, resolved_count) = tokio::try_join!(", "type": "added" },
+        { "line": 96, "text": "        query_new(db),", "type": "added" },
+        { "line": 97, "text": "        query_resolved(db),", "type": "added" },
+        { "line": 98, "text": "    )?;", "type": "added" }
+      ],
+      "identifiers": [{ "name": "tokio::try_join!", "desc": "Runs futures concurrently, short-circuits on first error" }],
+      "explanation": "Queries now run concurrently via <code>try_join!</code>."
+    },
+    "why": "Sequential queries added ~600ms latency to report generation."
+  }
+]
 ```
 
 For `status: "new"` → set `before: null`, all code lines use type `"added"`.
