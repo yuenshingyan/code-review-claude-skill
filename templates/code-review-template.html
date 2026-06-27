@@ -282,9 +282,9 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 }
 .cb > div { white-space: pre; position: relative; padding-left: 40px; min-height: 1.55em; }
 .cb > div::before { content: attr(data-line); position: absolute; left: 0; width: 32px; text-align: right; color: #4a5568; font-size: 11px; user-select: none; }
-.cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 52px; }
-.cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 52px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); }
-.cb .added::before, .cb .removed::before { left: 14px; }
+.cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 50px; }
+.cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 50px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); }
+.cb .added::before, .cb .removed::before { left: 10px; }
 
 /* Key identifiers */
 .key-ids { margin: 8px 0; }
@@ -426,20 +426,6 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
 .bc-path .bc-file { color: #4a9eff; }
 a.bc-path { text-decoration: none; }
 
-/* Scroll breadcrumb bar */
-.breadcrumb-bar {
-  position: sticky; top: 38px; z-index: 9;
-  background: #12161d; border-bottom: 1px solid #1e2430;
-  padding: 4px 16px; font-size: 11px; min-height: 24px;
-  font-family: 'IBM Plex Mono', monospace;
-  display: none; align-items: center; gap: 6px;
-  color: #4a5568;
-}
-.breadcrumb-bar.visible { display: flex; }
-.breadcrumb-bar .bb-tab { color: #4a9eff; }
-.breadcrumb-bar .bb-sep { color: #333a47; margin: 0 2px; }
-.breadcrumb-bar .bb-file { color: #8892a4; }
-.breadcrumb-bar .bb-desc { color: #4a5568; }
 
 /* Command palette */
 .cmd-palette-overlay {
@@ -577,7 +563,6 @@ a.bc-path { text-decoration: none; }
     <div class="cmd-palette-results" id="cmd-palette-results"></div>
   </div>
 </div>
-<div class="breadcrumb-bar" id="breadcrumb-bar"></div>
 <div class="toast" id="toast"></div>
 
 <script id="review-data" type="application/json">{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{"features":[],"fixes":[],"refactors":[],"chores":[]}}</script>
@@ -1570,40 +1555,6 @@ a.bc-path { text-decoration: none; }
     if (e.target === paletteOverlay) closePalette();
   });
 
-  // Scroll breadcrumb bar
-  var bbBar = document.getElementById('breadcrumb-bar');
-  var allSections = root.querySelectorAll('section.change');
-  function updateBreadcrumb() {
-    var activePanel = root.querySelector('.tab-panel.active');
-    if (!activePanel || activePanel.dataset.tab === 'summary' || activePanel.dataset.tab === 'commits' || activePanel.dataset.tab === 'skipped') {
-      bbBar.classList.remove('visible');
-      return;
-    }
-    var sections = activePanel.querySelectorAll('section.change');
-    var current = null;
-    for (var i = 0; i < sections.length; i++) {
-      var rect = sections[i].getBoundingClientRect();
-      if (rect.top <= 80) current = sections[i];
-    }
-    if (!current) {
-      bbBar.classList.remove('visible');
-      return;
-    }
-    var tabName = activePanel.dataset.tab;
-    var tabLabel = TAB_LABELS[tabName] || tabName;
-    var fileAttr = current.dataset.searchFile || '';
-    var descAttr = current.dataset.searchDesc || '';
-    bbBar.innerHTML = '<span class="bb-tab">' + esc(tabLabel) + '</span>' +
-      '<span class="bb-sep">›</span>' +
-      '<span class="bb-file">' + esc(fileAttr) + '</span>' +
-      '<span class="bb-sep">—</span>' +
-      '<span class="bb-desc">' + esc(descAttr) + '</span>';
-    bbBar.classList.add('visible');
-  }
-  window.addEventListener('scroll', updateBreadcrumb, { passive: true });
-  root.querySelectorAll('.tab').forEach(function(btn) {
-    btn.addEventListener('click', function() { setTimeout(updateBreadcrumb, 50); });
-  });
 
 
   // Review checklist persistence
@@ -1659,7 +1610,6 @@ a.bc-path { text-decoration: none; }
   switchTab = function(tabName) {
     origSwitchTab(tabName);
     history.replaceState(null, '', '#' + tabName);
-    setTimeout(updateBreadcrumb, 50);
   };
 
   // Parse hash on load
