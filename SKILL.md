@@ -190,6 +190,33 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
   { "line": 85, "text": "    let total = total + handling_fee;", "type": "added" },
   { "line": "", "text": "// … 4 more similar fee additions", "type": "context" }
   ```
+  **Mechanical hunk test:** After writing any `code` array, scan the integer `line` values in sequence, skipping `""` entries. If the gap between any two consecutive integers exceeds 5, you have merged separate hunks — stop and split into separate sections.
+
+  **WRONG** — a synthetic comment bridges two separate hunks (gap 78→130 = 52 lines):
+  ```json
+  { "line": 73, "text": "    let total_counts = Entity::find()", "type": "added" },
+  { "line": 74, "text": "        .group_by(Column::ProjectId)", "type": "added" },
+  { "line": 78, "text": "        .all(db).await?;", "type": "added" },
+  { "line": "", "text": "// … second query for labeled counts …", "type": "context" },
+  { "line": 130, "text": "    total_items: total_map.get(&m.id).copied().unwrap_or(0),", "type": "added" }
+  ```
+  The synthetic comment hides a 52-line gap. These are two completely different changes — an aggregate query and a struct field assignment — each needing its own `why`/`how`.
+
+  **CORRECT** — two separate section entries, one per hunk:
+  ```json
+  { "file": "src/projects/server.rs", "desc": "Add GROUP BY query for total item counts",
+    "after": { "code": [
+      { "line": 73, "text": "    let total_counts = Entity::find()", "type": "added" },
+      { "line": 74, "text": "        .group_by(Column::ProjectId)", "type": "added" },
+      { "line": 78, "text": "        .all(db).await?;", "type": "added" }
+    ], "identifiers": [], "explanation": "Batch query returns per-project counts." },
+    "why": "N+1 queries on the project list caused timeouts with >50 projects." },
+  { "file": "src/projects/server.rs", "desc": "Populate total_items from query result map",
+    "after": { "code": [
+      { "line": 130, "text": "    total_items: total_map.get(&m.id).copied().unwrap_or(0),", "type": "added" }
+    ], "identifiers": [], "explanation": "Reads pre-fetched count from the result map." },
+    "why": "Progress bars showed 0/0 because the field was always hardcoded to zero." }
+  ```
 - **One logical change per snippet.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), do NOT concatenate them into a single code block. Each hunk is a distinct change — show each one in its own snippet. Split the file into multiple section entries (same `file` path, different `desc`/`before`/`after`/`why` for each change). This prevents unrelated changes from appearing as one continuous block and lets each change have its own explanation.
 - Key identifiers should cover types, functions, fields a newcomer needs defined. Skip trivial ones (`i`, `db`, `Ok`). Include `kind` (function, variable, interface, type, class, const, enum) and `type` (type signature) when available — these help reviewers understand what each identifier is at a glance.
 - `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
@@ -302,6 +329,16 @@ For `status: "new"` → set `before: null`, all code lines use type `"added"`.
 For `status: "deleted"` → set `after: null`, all code lines use type `"removed"`.
 For `status: "renamed"` → add `"oldFile": "<original path>"`.
 
+### Self-check before writing `review.json`
+
+Before writing the file, scan every `code` array in your draft:
+
+1. Collect all entries where `line` is an integer (skip `""` entries).
+2. For each consecutive pair, compute the gap (`b - a`).
+3. If any gap exceeds 5, that block merges separate hunks — split that section into two entries now, each with its own `desc`, `before`/`after`, and `why`/`how`/`when`/`where`.
+
+Do not proceed to Step 4 until every `code` array passes this check.
+
 ## Step 4 — Validate, inject, and write
 
 Run as a **single** script:
@@ -312,6 +349,29 @@ import json, os
 
 with open('scratchpad/review.json', encoding='utf-8') as f:
     data = json.load(f)
+
+def check_hunk_gaps(data, max_gap=5):
+    violations = []
+    for tab, entries in data.get('sections', {}).items():
+        for entry in entries:
+            for block_name in ('before', 'after'):
+                block = entry.get(block_name)
+                if not isinstance(block, dict):
+                    continue
+                prev = None
+                for item in block.get('code', []):
+                    ln = item.get('line')
+                    if isinstance(ln, int):
+                        if prev is not None and ln - prev > max_gap:
+                            violations.append(
+                                f"  {entry['file']} ({block_name}): line {prev} → {ln} (gap {ln - prev}) — split into separate sections"
+                            )
+                        prev = ln
+    return violations
+
+violations = check_hunk_gaps(data)
+if violations:
+    raise ValueError("Merged hunks detected — fix before injecting:\n" + "\n".join(violations))
 
 tpl = os.path.expanduser('~/.claude/skills/code-review/templates/code-review-template.html')
 with open(tpl, encoding='utf-8') as f:
