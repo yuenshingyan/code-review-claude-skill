@@ -98,7 +98,7 @@ Each section MUST include structured annotations explaining the change. These re
 
 **WHERE** — Name the files, modules, components, APIs, hooks, or downstream systems that depend on, call, or are affected by this change. This maps the blast radius so reviewers and future maintainers know what else to check or update.
 
-Keep each field to 1–3 sentences. If you need more, the change should be broken smaller. For trivially obvious changes (typo fixes, formatting, renames with self-evident names), a short `why` alone is sufficient — omit `how`/`when`/`where`.
+Write as much as needed to make each field genuinely useful to someone reading this code cold in six months. Clarity trumps brevity. For trivially obvious changes (typo fixes, formatting, renames with self-evident names), a short `why` alone is sufficient — omit `how`/`when`/`where`. When a section covers a diff that mixes multiple unrelated concerns, open `why` with a one-sentence summary and break each concern into a numbered item with its own before/after/why narrative.
 
 ### JSON schema
 
@@ -137,10 +137,10 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
         "note": "<optional 'Also in this diff' note — omit if not needed>",
         "before": "<BeforeAfterBlock or null (null for new files)>",
         "after": "<BeforeAfterBlock or null (null for deleted files)>",
-        "why": "<1-3 sentences: root cause or motivation>",
-        "how": "<1-3 sentences: approach and key technical decisions>",
-        "when": "<1-3 sentences: runtime conditions that activate this path>",
-        "where": "<1-3 sentences: files/systems affected — blast radius>"
+        "why": "<root cause or motivation — as much prose as needed>",
+        "how": "<approach and key technical decisions — as much prose as needed>",
+        "when": "<runtime conditions that activate this path — as much prose as needed>",
+        "where": "<files/systems affected — blast radius — as much prose as needed>"
       }
     ]
   }
