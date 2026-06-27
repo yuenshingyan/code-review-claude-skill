@@ -311,6 +311,7 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
 .annotation-label.lbl-when { color: #fbbf24; }
 .annotation-label.lbl-where { color: #f87171; }
 .annotation-text { color: #8892a4; padding: 5px 0; flex: 1; min-width: 0; }
+.annotation-text code { font-family: var(--font-mono, monospace); font-size: 11px; color: #e2e8f0; background: rgba(255,255,255,0.07); border-radius: 3px; padding: 1px 4px; }
 .note { color: #8892a4; font-size: 11px; margin: 8px 0; padding: 6px 10px; background: rgba(255,255,255,0.02); border: 1px solid #1e242d; border-radius: 3px; }
 .note strong { color: #fbbf24; }
 
@@ -391,6 +392,7 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
   .annotation-label.lbl-when { color: #8a6d00; }
   .annotation-label.lbl-where { color: #c83232; }
   .annotation-text { color: #555; }
+  .annotation-text code { color: #1a1a2e; background: rgba(0,0,0,0.07); }
   .key-ids li { color: #555; }
   .key-ids code { color: #1a1a2e; background: #eee; }
   h4.why-heading { color: #1a1a2e; }
@@ -885,7 +887,7 @@ a.bc-path { text-decoration: none; }
         if (s[a]) {
           html += '<div class="annotation-row">' +
             '<span class="annotation-label lbl-' + a + '">' + a + '</span>' +
-            '<span class="annotation-text">' + esc(s[a]) + '</span></div>';
+            '<span class="annotation-text">' + s[a] + '</span></div>';
         }
       });
       html += '</div>';
