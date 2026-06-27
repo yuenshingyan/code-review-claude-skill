@@ -412,14 +412,6 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
 }
 
 
-/* Function context label above code blocks */
-.fn-context {
-  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
-  color: #4a5568; padding: 3px 0 2px; margin-bottom: 2px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.fn-context::before { content: 'ƒ '; color: #333a47; }
-
 /* Breadcrumb file paths */
 .bc-path { font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
 .bc-path .bc-seg { color: #4a5568; }
@@ -902,9 +894,7 @@ a.bc-path { text-decoration: none; }
 
   // Build a diff column (before or after)
   function buildDiffCol(block, label, lang) {
-    var fcHtml = block.function_context ? '<div class="fn-context">' + esc(block.function_context) + '</div>' : '';
     return '<div class="diff-col"><h5>' + label + '</h5>' +
-      fcHtml +
       buildCB(block.code, lang) +
       buildIds(block.identifiers) + '</div>';
   }
@@ -972,16 +962,14 @@ a.bc-path { text-decoration: none; }
         '</div>';
     } else if (s.before && !s.after) {
       // Deletion-only: show before block full-width
-      var fcBefore = s.before.function_context ? '<div class="fn-context">' + esc(s.before.function_context) + '</div>' : '';
-      html += '<div class="diff-full">' + fcBefore + buildCB(s.before.code, sLang) + '</div>';
+      html += '<div class="diff-full">' + buildCB(s.before.code, sLang) + '</div>';
       if (s.before.identifiers && s.before.identifiers.length > 0) {
         html += buildIds(s.before.identifiers);
       }
 
     } else if (s.after) {
       // Addition-only: show after block full-width
-      var fcAfter = s.after.function_context ? '<div class="fn-context">' + esc(s.after.function_context) + '</div>' : '';
-      html += '<div class="diff-full">' + fcAfter + buildCB(s.after.code, sLang) + '</div>';
+      html += '<div class="diff-full">' + buildCB(s.after.code, sLang) + '</div>';
       if (s.after.identifiers && s.after.identifiers.length > 0) {
         html += buildIds(s.after.identifiers);
       }
