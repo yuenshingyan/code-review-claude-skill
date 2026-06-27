@@ -21,6 +21,7 @@ Exit code 0 on success, 1 if hunk gap violations or injection failure.
 """
 
 import sys
+import os
 import json
 
 
@@ -89,9 +90,46 @@ def find_best_hunk(section, hunks, side, change_type, exclude=None):
         n = n_changed(hunk, side, change_type)
         candidates.append((kw, n, i, hunk))
     if not candidates:
-        return None, None
+        return None, None, 0
     candidates.sort(key=lambda x: (-x[0], -x[1]))
-    return candidates[0][3], candidates[0][2]
+    return candidates[0][3], candidates[0][2], candidates[0][0]
+
+
+def merge_hunk_sides(hunks, side):
+    """Merge code arrays from multiple hunks into one, inserting a separator
+    between non-adjacent hunks."""
+    if not hunks:
+        return []
+    sorted_hunks = sorted(hunks, key=lambda h: h.get(side, [{}])[0].get('line', 0) if h.get(side) else 0)
+    merged = []
+    for hunk in sorted_hunks:
+        code = hunk.get(side, [])
+        if not code:
+            continue
+        if merged:
+            merged.append({'line': '', 'text': '...', 'type': 'separator'})
+        merged.extend(code)
+    return merged
+
+
+def find_all_matching_hunks(section, hunks, side, change_type, exclude=None, min_score=0):
+    """Find additional hunks that match a section with score >= min_score.
+    Returns list of (hunk, index) pairs sorted by score descending."""
+    keywords = extract_keywords(section)
+    if not keywords:
+        return []
+    threshold = max(3, min_score // 2)
+    matches = []
+    for i, hunk in enumerate(hunks):
+        if exclude and i in exclude:
+            continue
+        if not has_changes(hunk, side, change_type):
+            continue
+        kw = score_hunk(hunk, side, keywords)
+        if kw >= threshold:
+            matches.append((kw, i, hunk))
+    matches.sort(key=lambda x: (-x[0],))
+    return [(h, i) for _, i, h in matches]
 
 
 def find_paired_hunk(section, hunks, exclude=None):
@@ -112,9 +150,9 @@ def find_paired_hunk(section, hunks, exclude=None):
             continue
         candidates.append((kw_r + kw_a, nr + na, i, hunk))
     if not candidates:
-        return None, None
+        return None, None, 0
     candidates.sort(key=lambda x: (-x[0], -x[1]))
-    return candidates[0][3], candidates[0][2]
+    return candidates[0][3], candidates[0][2], candidates[0][0]
 
 
 def preserve_field(section, block_name, field):
@@ -142,7 +180,7 @@ def rebuild(review, parsed):
             claimed = file_claimed.setdefault(file_path, set())
 
             if status == 'new':
-                best, idx = find_best_hunk(section, hunks, 'after', 'added', exclude=claimed)
+                best, idx, _ = find_best_hunk(section, hunks, 'after', 'added', exclude=claimed)
                 if best:
                     if idx is not None:
                         claimed.add(idx)
@@ -154,7 +192,7 @@ def rebuild(review, parsed):
                         'explanation': preserve_field(section, 'after', 'explanation'),
                     }
             elif status == 'deleted':
-                best, idx = find_best_hunk(section, hunks, 'before', 'removed', exclude=claimed)
+                best, idx, _ = find_best_hunk(section, hunks, 'before', 'removed', exclude=claimed)
                 if best:
                     if idx is not None:
                         claimed.add(idx)
@@ -166,34 +204,64 @@ def rebuild(review, parsed):
                     }
                     section['after'] = None
             else:
-                paired, pidx = find_paired_hunk(section, hunks, exclude=claimed)
+                paired, pidx, pscore = find_paired_hunk(section, hunks, exclude=claimed)
                 if paired:
                     if pidx is not None:
                         claimed.add(pidx)
-                    before_hunk = paired
-                    after_hunk = paired
+                    before_hunks = [paired]
+                    after_hunks = [paired]
+                    extra_before = find_all_matching_hunks(section, hunks, 'before', 'removed', exclude=claimed, min_score=pscore)
+                    extra_after = find_all_matching_hunks(section, hunks, 'after', 'added', exclude=claimed, min_score=pscore)
+                    for h, i in extra_before:
+                        before_hunks.append(h)
+                        claimed.add(i)
+                    for h, i in extra_after:
+                        if i not in claimed:
+                            after_hunks.append(h)
+                            claimed.add(i)
+                    section['before'] = {
+                        'code': merge_hunk_sides(before_hunks, 'before'),
+                        'function_context': paired.get('function_context', ''),
+                        'identifiers': preserve_field(section, 'before', 'identifiers'),
+                        'explanation': preserve_field(section, 'before', 'explanation'),
+                    }
+                    section['after'] = {
+                        'code': merge_hunk_sides(after_hunks, 'after'),
+                        'function_context': paired.get('function_context', ''),
+                        'identifiers': preserve_field(section, 'after', 'identifiers'),
+                        'explanation': preserve_field(section, 'after', 'explanation'),
+                    }
                 else:
-                    before_hunk, bidx = find_best_hunk(section, hunks, 'before', 'removed', exclude=claimed)
-                    after_hunk, aidx = find_best_hunk(section, hunks, 'after', 'added', exclude=claimed)
+                    before_hunk, bidx, bscore = find_best_hunk(section, hunks, 'before', 'removed', exclude=claimed)
+                    after_hunk, aidx, ascore = find_best_hunk(section, hunks, 'after', 'added', exclude=claimed)
                     if bidx is not None:
                         claimed.add(bidx)
                     if aidx is not None:
                         claimed.add(aidx)
 
-                if before_hunk:
-                    section['before'] = {
-                        'code': before_hunk['before'],
-                        'function_context': before_hunk.get('function_context', ''),
-                        'identifiers': preserve_field(section, 'before', 'identifiers'),
-                        'explanation': preserve_field(section, 'before', 'explanation'),
-                    }
-                if after_hunk:
-                    section['after'] = {
-                        'code': after_hunk['after'],
-                        'function_context': after_hunk.get('function_context', ''),
-                        'identifiers': preserve_field(section, 'after', 'identifiers'),
-                        'explanation': preserve_field(section, 'after', 'explanation'),
-                    }
+                    if before_hunk:
+                        before_hunks = [before_hunk]
+                        for h, i in find_all_matching_hunks(section, hunks, 'before', 'removed', exclude=claimed, min_score=bscore):
+                            before_hunks.append(h)
+                            claimed.add(i)
+                        section['before'] = {
+                            'code': merge_hunk_sides(before_hunks, 'before'),
+                            'function_context': before_hunk.get('function_context', ''),
+                            'identifiers': preserve_field(section, 'before', 'identifiers'),
+                            'explanation': preserve_field(section, 'before', 'explanation'),
+                        }
+                    if after_hunk:
+                        after_hunks = [after_hunk]
+                        for h, i in find_all_matching_hunks(section, hunks, 'after', 'added', exclude=claimed, min_score=ascore):
+                            if i not in claimed:
+                                after_hunks.append(h)
+                                claimed.add(i)
+                        section['after'] = {
+                            'code': merge_hunk_sides(after_hunks, 'after'),
+                            'function_context': after_hunk.get('function_context', ''),
+                            'identifiers': preserve_field(section, 'after', 'identifiers'),
+                            'explanation': preserve_field(section, 'after', 'explanation'),
+                        }
 
 
 def validate(review):
@@ -222,6 +290,9 @@ def validate(review):
                     print(f"  CONTEXT-ONLY: {section['file']} {block_name}: {section['desc']}")
                 prev = None
                 for item in code:
+                    if item.get('type') == 'separator':
+                        prev = None
+                        continue
                     ln = item.get('line')
                     if isinstance(ln, int):
                         if prev is not None and ln - prev > 5:
