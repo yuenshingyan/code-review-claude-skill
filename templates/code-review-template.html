@@ -285,12 +285,6 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 .cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 52px; }
 .cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 52px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); }
 .cb .added::before, .cb .removed::before { left: 14px; }
-.cb > div.hunk-gap-warning {
-  white-space: normal; padding-left: 12px;
-  background: rgba(251, 191, 36, 0.08); border-left: 2px solid #fbbf24;
-  margin: 2px -12px; color: #fbbf24; font-style: italic; font-size: 11px;
-}
-.cb > div.hunk-gap-warning::before { content: '' !important; width: 0; }
 
 /* Key identifiers */
 .key-ids { margin: 8px 0; }
@@ -317,7 +311,6 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
 .annotation-label.lbl-when { color: #fbbf24; }
 .annotation-label.lbl-where { color: #f87171; }
 .annotation-text { color: #8892a4; padding: 5px 0; flex: 1; min-width: 0; }
-.annotation-text code { font-family: var(--font-mono, monospace); font-size: 11px; color: #e2e8f0; background: rgba(255,255,255,0.07); border-radius: 3px; padding: 1px 4px; }
 .note { color: #8892a4; font-size: 11px; margin: 8px 0; padding: 6px 10px; background: rgba(255,255,255,0.02); border: 1px solid #1e242d; border-radius: 3px; }
 .note strong { color: #fbbf24; }
 
@@ -398,7 +391,6 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
   .annotation-label.lbl-when { color: #8a6d00; }
   .annotation-label.lbl-where { color: #c83232; }
   .annotation-text { color: #555; }
-  .annotation-text code { color: #1a1a2e; background: rgba(0,0,0,0.07); }
   .key-ids li { color: #555; }
   .key-ids code { color: #1a1a2e; background: #eee; }
   h4.why-heading { color: #1a1a2e; }
@@ -775,16 +767,10 @@ a.bc-path { text-decoration: none; }
   // Build code block
   function buildCB(lines) {
     var html = '<div class="cb">';
-    var prevLine = null;
     lines.forEach(function(l) {
-      var ln = (l.line != null && l.line !== '') ? parseInt(String(l.line), 10) : null;
-      if (ln !== null && !isNaN(ln) && prevLine !== null && ln - prevLine > 5) {
-        html += '<div class="hunk-gap-warning" data-line="">⚠ line ' + prevLine + ' → ' + ln + ' — possible merged hunk</div>';
-      }
-      if (ln !== null && !isNaN(ln)) prevLine = ln;
       var cls = l.type === 'added' ? ' class="added"' : l.type === 'removed' ? ' class="removed"' : '';
-      var lnStr = (l.line != null && l.line !== '') ? String(l.line) : '';
-      html += '<div' + cls + ' data-line="' + esc(lnStr) + '">' + esc(l.text) + '</div>';
+      var ln = (l.line != null && l.line !== '') ? String(l.line) : '';
+      html += '<div' + cls + ' data-line="' + esc(ln) + '">' + esc(l.text) + '</div>';
     });
     html += '</div>';
     return html;
@@ -899,7 +885,7 @@ a.bc-path { text-decoration: none; }
         if (s[a]) {
           html += '<div class="annotation-row">' +
             '<span class="annotation-label lbl-' + a + '">' + a + '</span>' +
-            '<span class="annotation-text">' + s[a] + '</span></div>';
+            '<span class="annotation-text">' + esc(s[a]) + '</span></div>';
         }
       });
       html += '</div>';
