@@ -239,9 +239,45 @@ def validate(review):
 DEFAULT_PLACEHOLDER = '{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{"features":[],"fixes":[],"refactors":[],"chores":[]}}'
 
 
+def _load_vendor_hljs():
+    """Return (js_content, css_content) from vendor/ next to this script, or ('', '')."""
+    skill_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    vendor_dir = os.path.join(skill_root, 'vendor')
+
+    js_path = os.path.join(vendor_dir, 'highlight.min.js')
+    if not os.path.isfile(js_path):
+        return '', ''
+
+    with open(js_path, encoding='utf-8') as f:
+        js_content = f.read()
+
+    css_content = ''
+    try:
+        css_files = sorted(
+            f for f in os.listdir(vendor_dir) if f.endswith('.css')
+        )
+        if css_files:
+            with open(os.path.join(vendor_dir, css_files[0]), encoding='utf-8') as f:
+                css_content = f.read()
+    except OSError:
+        pass
+
+    return js_content, css_content
+
+
 def inject(review, template_path, output_path):
     with open(template_path, encoding='utf-8') as f:
         template = f.read()
+
+    hljs_js, hljs_css = _load_vendor_hljs()
+    if hljs_js:
+        print("highlight.js found — syntax highlighting enabled")
+        template = template.replace('/* HLJS_CSS_PLACEHOLDER */', hljs_css, 1)
+        template = template.replace('/* HLJS_JS_PLACEHOLDER */', hljs_js, 1)
+    else:
+        print("no highlight.js in vendor/ — skipping syntax highlighting")
+        template = template.replace('/* HLJS_CSS_PLACEHOLDER */', '', 1)
+        template = template.replace('/* HLJS_JS_PLACEHOLDER */', '', 1)
 
     json_str = json.dumps(review, ensure_ascii=False)
     placeholder = f'<script id="review-data" type="application/json">{DEFAULT_PLACEHOLDER}</script>'
