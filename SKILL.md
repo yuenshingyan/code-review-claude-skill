@@ -88,6 +88,20 @@ Analyze the diffs and produce JSON matching the schema below. Write to `scratchp
 
 Omit any tab key with zero entries.
 
+### WHY / HOW / WHEN / WHERE annotations
+
+Each section MUST include structured annotations explaining the change. These render as a labeled block in the template.
+
+**WHY** — State the problem, requirement, bug, or goal that motivated this change. Name the root cause, not the symptom. Reference ticket IDs, error messages, or user-reported issues when available. Write for someone who has never seen the original bug.
+
+**HOW** — Explain what the new code does to address the WHY. Describe the approach and key technical decisions — not a line-by-line narration of syntax. If you chose this approach over a more obvious alternative, note the tradeoff in one sentence so future developers don't revert to the broken approach.
+
+**WHEN** — Describe the runtime conditions, user actions, data states, or system configurations under which this code path activates. This helps maintainers know when to test it, when to suspect it during debugging, and which users or environments are affected.
+
+**WHERE** — Name the files, modules, components, APIs, hooks, or downstream systems that depend on, call, or are affected by this change. This maps the blast radius so reviewers and future maintainers know what else to check or update.
+
+Keep each field to 1–3 sentences. If you need more, the change should be broken smaller. For trivially obvious changes (typo fixes, formatting, renames with self-evident names), a short `why` alone is sufficient — omit `how`/`when`/`where`.
+
 ### JSON schema
 
 ```json
@@ -125,7 +139,10 @@ Omit any tab key with zero entries.
         "note": "<optional 'Also in this diff' note — omit if not needed>",
         "before": "<BeforeAfterBlock or null (null for new files)>",
         "after": "<BeforeAfterBlock or null (null for deleted files)>",
-        "why": "<one paragraph: motivation, not description>"
+        "why": "<1-3 sentences: root cause or motivation>",
+        "how": "<1-3 sentences: approach and key technical decisions>",
+        "when": "<1-3 sentences: runtime conditions that activate this path>",
+        "where": "<1-3 sentences: files/systems affected — blast radius>"
       }
     ]
   }
@@ -153,7 +170,11 @@ Omit any tab key with zero entries.
 - **`related`:** Array of file path strings. Detect from: imports, caller→callee, same-commit co-changes, migration+schema pairs, test+implementation pairs. 1–3 links per section max. The template automatically groups related sections into a collapsible visual container — no extra markup needed.
 - **`code.line`:** Actual source line number from diff hunk headers. Use `""` for separator/comment lines in grouped sections.
 - **`breaking`:** Only for genuine caller-breaking changes: renamed function, changed signature, removed parameter/feature, changed return type/default. Not for new features, bug fixes, or internal refactors.
-- **Rich text:** `breakingDetail`, `note`, `why` may contain `<code>`, `<strong>`, `<em>`. No other HTML.
+- **`why`:** Mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
+- **`how`:** Mandatory for non-trivial changes. Describe approach and tradeoffs, not syntax.
+- **`when`:** Mandatory for non-trivial changes. Name runtime conditions, user actions, data states.
+- **`where`:** Mandatory for non-trivial changes. Map the blast radius — downstream files, APIs, consumers.
+- **Rich text:** `breakingDetail`, `note`, `why`, `how`, `when`, `where` may contain `<code>`, `<strong>`, `<em>`. No other HTML.
 
 ### Content quality rules
 
@@ -211,7 +232,10 @@ Omit any tab key with zero entries.
     ],
     "explanation": "Now accepts a <code>RefreshConfig</code> for transparent token refresh."
   },
-  "why": "Users were getting logged out mid-session when their token expired during long form submissions."
+  "why": "Users were getting logged out mid-session when their token expired during long form submissions.",
+  "how": "Added a <code>RefreshConfig</code> parameter to <code>AuthMiddleware::new()</code> that enables transparent token refresh within a configurable grace period, avoiding forced re-authentication.",
+  "when": "Activates on every authenticated HTTP request when the JWT is expired but within the grace period. Affects all users with active sessions during token rotation.",
+  "where": "<code>src/auth/claims.rs</code> (RefreshConfig definition), <code>src/main.rs</code> (middleware construction), all integration tests that instantiate AuthMiddleware."
 }
 ```
 
@@ -236,7 +260,10 @@ Omit any tab key with zero entries.
       "identifiers": [{ "name": "parsed_ids", "desc": "Validated i32 user IDs parsed from string input" }],
       "explanation": "New block resolves recipient IDs to active user emails."
     },
-    "why": "Callers were passing raw IDs; the report needs email addresses."
+    "why": "Callers were passing raw IDs; the report needs email addresses.",
+    "how": "Parses string IDs to i32, queries the Users table with <code>is_in</code> filter to batch-fetch matching user records.",
+    "when": "Every time <code>send_report()</code> is called with recipient IDs — triggered by scheduled reports and manual sends.",
+    "where": "<code>Users::Entity</code> (SeaORM model), <code>send_report()</code> callers in <code>src/report/scheduler.rs</code> and <code>src/api/reports.rs</code>."
   },
   {
     "file": "src/report/service.rs",
@@ -263,7 +290,10 @@ Omit any tab key with zero entries.
       "identifiers": [{ "name": "tokio::try_join!", "desc": "Runs futures concurrently, short-circuits on first error" }],
       "explanation": "Queries now run concurrently via <code>try_join!</code>."
     },
-    "why": "Sequential queries added ~600ms latency to report generation."
+    "why": "Sequential queries added ~600ms latency to report generation.",
+    "how": "Replaced sequential <code>.await</code> calls with <code>tokio::try_join!</code> to run both queries concurrently. Short-circuits on first error to preserve existing error behavior.",
+    "when": "Every call to <code>gather_report_data()</code> — triggered by both scheduled and on-demand report generation.",
+    "where": "<code>query_new()</code> and <code>query_resolved()</code> in this file, <code>src/report/scheduler.rs</code> (caller)."
   }
 ]
 ```
