@@ -149,6 +149,7 @@ def rebuild(review, parsed):
                     section['before'] = None
                     section['after'] = {
                         'code': best['after'],
+                        'function_context': best.get('function_context', ''),
                         'identifiers': preserve_field(section, 'after', 'identifiers'),
                         'explanation': preserve_field(section, 'after', 'explanation'),
                     }
@@ -159,6 +160,7 @@ def rebuild(review, parsed):
                         claimed.add(idx)
                     section['before'] = {
                         'code': best['before'],
+                        'function_context': best.get('function_context', ''),
                         'identifiers': preserve_field(section, 'before', 'identifiers'),
                         'explanation': preserve_field(section, 'before', 'explanation'),
                     }
@@ -181,12 +183,14 @@ def rebuild(review, parsed):
                 if before_hunk:
                     section['before'] = {
                         'code': before_hunk['before'],
+                        'function_context': before_hunk.get('function_context', ''),
                         'identifiers': preserve_field(section, 'before', 'identifiers'),
                         'explanation': preserve_field(section, 'before', 'explanation'),
                     }
                 if after_hunk:
                     section['after'] = {
                         'code': after_hunk['after'],
+                        'function_context': after_hunk.get('function_context', ''),
                         'identifiers': preserve_field(section, 'after', 'identifiers'),
                         'explanation': preserve_field(section, 'after', 'explanation'),
                     }
