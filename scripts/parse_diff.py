@@ -13,7 +13,7 @@ import sys
 import json
 import re
 
-HUNK_HEADER = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
+HUNK_HEADER = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$')
 
 def parse_diff(lines):
     files = []
@@ -75,9 +75,11 @@ def parse_diff(lines):
                 current_file['hunks'].append(finalize_hunk(current_hunk))
             old_line = int(m.group(1))
             new_line = int(m.group(3))
+            function_context = m.group(5).strip() if m.group(5) else ''
             current_hunk = {
                 'old_start': old_line,
                 'new_start': new_line,
+                'function_context': function_context,
                 'before': [],  # context + removed lines with old line numbers
                 'after': [],   # context + added lines with new line numbers
             }
