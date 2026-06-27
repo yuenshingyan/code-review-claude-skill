@@ -36,30 +36,26 @@ Use `AskUserQuestion` with header "Review mode", question "What would you like t
 2. **Commits since main** — All commits on this branch since main
 3. **Commits since ref** — Specify a base ref to diff against HEAD
 
-- Option 1 → Mode A.
-- Option 2 → Mode B. Detect default branch first: `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'` — use result if it differs from `main`.
-- Option 3 → ask follow-up for the ref, then Mode B.
-- Custom text → treat as base ref, Mode B.
+- Option 1 → pass `uncommitted` to gather_diff.py.
+- Option 2 → pass `branch` to gather_diff.py (it auto-detects the default branch).
+- Option 3 → ask follow-up for the ref, then pass that ref string to gather_diff.py.
+- Custom text → treat as base ref, pass directly to gather_diff.py.
 
 ## Step 1 — Gather changes
 
-**Mode A (uncommitted):**
-1. `git diff --stat` + `git diff --cached --stat` → modified files.
-2. `git diff --shortstat` + `git diff --cached --shortstat` → stats bar numbers.
-3. `git diff` + `git diff --cached` → actual diffs.
-4. Read changed files directly for large diffs needing context.
-5. Scope label: `uncommitted changes`.
+Run `gather_diff.py` with the mode chosen in Step 0:
 
-**Mode B (committed):**
-1. `git diff <base>...HEAD --stat -M` → changed files + churn (`-M` detects renames).
-2. `git diff <base>...HEAD --shortstat` → stats bar numbers.
-3. `git log <base>..HEAD --oneline --format="%h %s|%an|%ad" --date=short` → commit history.
-4. For each commit, `git show <hash> --stat` and read the diff.
-5. Scope label: `<base>..HEAD (N commits)`.
+```bash
+python3 ~/.claude/skills/code-review/scripts/gather_diff.py <mode> \
+  --meta scratchpad/meta.json \
+  --diff scratchpad/raw.diff
+```
 
-### Skip list
+Where `<mode>` is `uncommitted`, `branch`, or a base ref string (e.g. `main`, `v1.2.0`).
 
-Add to the `skipped` array (don't create sections): lock files (`Cargo.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Gemfile.lock`, `poetry.lock`, `composer.lock`), generated code (protobuf, GraphQL, OpenAPI), vendored deps (`vendor/`, `third_party/`, `node_modules/`), binary files. Exception: include if significant manual changes are mixed in.
+The script handles all git commands, skip-list filtering (lock files, vendored deps, generated code, binary files), stat extraction, and commit history automatically. It outputs:
+- `scratchpad/meta.json` — scope, stats, commits, skipped files, changed file list
+- `scratchpad/raw.diff` — filtered unified diff
 
 ### Scale guidance
 
@@ -67,31 +63,17 @@ Add to the `skipped` array (don't create sections): lock files (`Cargo.lock`, `p
 - **16–40 files**: Group trivially related files. Full detail on important changes, lighter on chores.
 - **>40 files**: Group aggressively. Summarize mechanical changes in one section. Focus on top ~20.
 
-## Step 2 — Verify the template exists
+## Step 2 — Parse the diff
 
-Run: `test -f ~/.claude/skills/code-review/templates/code-review-template.html && echo OK || echo MISSING`
-
-If MISSING, report the error and stop. Do not read the file — Step 5's script handles injection directly.
-
-## Step 3 — Parse the diff
-
-Pipe the diff through `parse_diff.py` to produce structured hunks JSON:
-
-**Mode A (uncommitted):**
 ```bash
-{ git diff; git diff --cached; } | python3 ~/.claude/skills/code-review/scripts/parse_diff.py > scratchpad/hunks.json
+cat scratchpad/raw.diff | python3 ~/.claude/skills/code-review/scripts/parse_diff.py > scratchpad/hunks.json
 ```
 
-**Mode B (committed):**
-```bash
-git diff <base>...HEAD | python3 ~/.claude/skills/code-review/scripts/parse_diff.py > scratchpad/hunks.json
-```
+## Step 3 — Produce the review JSON
 
-The script outputs a JSON array of file entries with `before`/`after` arrays (context trimmed to 3 lines around changes). This is the source of truth for all code blocks — do not hand-write them.
+Read `scratchpad/meta.json` and `scratchpad/hunks.json`. Analyze the diffs and produce JSON matching the schema below. Write to `scratchpad/review.json`.
 
-## Step 4 — Produce the review JSON
-
-Analyze the diffs and produce JSON matching the schema below. Write to `scratchpad/review.json`.
+Use the values from `meta.json` directly for the top-level `scope`, `stats`, `commits`, and `skipped` fields — do not recompute them.
 
 ### Tab classification
 
@@ -125,7 +107,7 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
   "title": "Code Review",
   "projectName": "<from directory or manifest>",
   "date": "YYYY-MM-DD",
-  "scope": "<scope label from Step 1>",
+  "scope": "<from meta.json>",
   "stats": { "files": 0, "added": 0, "deleted": 0 },
   "commits": [
     {
@@ -147,7 +129,7 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
         "desc": "<short description>",
         "added": 0,
         "removed": 0,
-        "commits": ["<short hash — omit array for Mode A>"],
+        "commits": ["<short hash — omit array for uncommitted mode>"],
         "related": ["<file path>"],
         "breaking": false,
         "breakingDetail": "<what breaks — only when breaking=true, else omit>",
@@ -176,13 +158,13 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
 }
 ```
 
-Always write `"code": []` — the build script populates code arrays from `hunks.json` by keyword-matching sections against diff hunks. Write real `identifiers` and `explanation`; the script preserves them.
+Always write `"code": []` — `build_review.py` populates code arrays from `hunks.json` by keyword-matching sections against diff hunks. Write real `identifiers` and `explanation`; the script preserves them.
 
 ### Field rules
 
 - **No `id` or `summary` needed.** The template derives both automatically.
-- **`commits` (top-level):** Newest-first. Omit entirely for Mode A.
-- **`commits` (per-section):** Short hashes of commits touching this file. Omit for Mode A.
+- **`commits` (top-level):** Newest-first. From `meta.json`. Empty array for uncommitted mode.
+- **`commits` (per-section):** Short hashes of commits touching this file. Omit for uncommitted mode.
 - **`related`:** Array of file path strings. Detect from: imports, caller→callee, same-commit co-changes, migration+schema pairs, test+implementation pairs. 1–3 links per section max. The template automatically groups related sections into a collapsible visual container — no extra markup needed.
 - **`breaking`:** Only for genuine caller-breaking changes: renamed function, changed signature, removed parameter/feature, changed return type/default. Not for new features, bug fixes, or internal refactors.
 - **`why`:** Mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
@@ -234,7 +216,7 @@ Always write `"code": []` — the build script populates code arrays from `hunks
 }
 ```
 
-**Multiple hunks in one file → multiple sections.** When a diff has separate hunks in the same file (e.g. a new helper at line 20 and a refactored query at line 95), emit one section per logical change. The template handles duplicate file paths by appending a suffix to the DOM id. Example — two sections for the same file (note `"code": []`; the build script fills these in):
+**Multiple hunks in one file → multiple sections.** When a diff has separate hunks in the same file (e.g. a new helper at line 20 and a refactored query at line 95), emit one section per logical change. The template handles duplicate file paths by appending a suffix to the DOM id. Example — two sections for the same file:
 
 ```json
 [
@@ -281,9 +263,7 @@ For `status: "new"` → set `before: null`.
 For `status: "deleted"` → set `after: null`.
 For `status: "renamed"` → add `"oldFile": "<original path>"`.
 
-## Step 5 — Build the review
-
-Run the build script, which assigns hunks to sections, validates, and produces the HTML:
+## Step 4 — Build the review
 
 ```bash
 python3 ~/.claude/skills/code-review/scripts/build_review.py \
@@ -293,7 +273,7 @@ python3 ~/.claude/skills/code-review/scripts/build_review.py \
   code-review.html
 ```
 
-The script prints a summary of sections rebuilt, gap violations, missing before/after blocks, and context-only blocks. If it exits 1, read the output to identify the issue:
+The script assigns hunks to sections, validates, and produces the HTML. If it exits 1, read the output to identify the issue:
 
 - **Gap violation** (`GAP: file (before): 73 → 130`) — that section is matching a hunk that spans two changes. Split the section into two entries with distinct `desc`/`why` so the keyword scorer can route each to the right hunk.
 - **NO BEFORE / NO AFTER** — no hunk in `hunks.json` matched this section. Check that the section's `desc`, `why`, `how` contain keywords from the actual diff lines. Adjust the wording or check that the file path matches exactly.
@@ -301,6 +281,6 @@ The script prints a summary of sections rebuilt, gap violations, missing before/
 
 Fix the violations in `scratchpad/review.json` and re-run until exit 0.
 
-## Step 6 — Report
+## Step 5 — Report
 
 Tell the user the output path and a one-line summary of how many changes were documented.
