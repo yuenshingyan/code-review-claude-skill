@@ -71,9 +71,25 @@ Add to the `skipped` array (don't create sections): lock files (`Cargo.lock`, `p
 
 Run: `test -f ~/.claude/skills/code-review/templates/code-review-template.html && echo OK || echo MISSING`
 
-If MISSING, report the error and stop. Do not read the file — Step 4's script handles injection directly.
+If MISSING, report the error and stop. Do not read the file — Step 5's script handles injection directly.
 
-## Step 3 — Produce the review JSON
+## Step 3 — Parse the diff
+
+Pipe the diff through `parse_diff.py` to produce structured hunks JSON:
+
+**Mode A (uncommitted):**
+```bash
+{ git diff; git diff --cached; } | python3 ~/.claude/skills/code-review/scripts/parse_diff.py > scratchpad/hunks.json
+```
+
+**Mode B (committed):**
+```bash
+git diff <base>...HEAD | python3 ~/.claude/skills/code-review/scripts/parse_diff.py > scratchpad/hunks.json
+```
+
+The script outputs a JSON array of file entries with `before`/`after` arrays (context trimmed to 3 lines around changes). This is the source of truth for all code blocks — do not hand-write them.
+
+## Step 4 — Produce the review JSON
 
 Analyze the diffs and produce JSON matching the schema below. Write to `scratchpad/review.json`.
 
@@ -152,9 +168,7 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
 **BeforeAfterBlock:**
 ```json
 {
-  "code": [
-    { "line": "<int or empty string>", "text": "<source line>", "type": "<context|added|removed>" }
-  ],
+  "code": [],
   "identifiers": [
     { "name": "<identifier>", "desc": "<what it is>" }
   ],
@@ -162,13 +176,14 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
 }
 ```
 
+Always write `"code": []` — the build script populates code arrays from `hunks.json` by keyword-matching sections against diff hunks. Write real `identifiers` and `explanation`; the script preserves them.
+
 ### Field rules
 
 - **No `id` or `summary` needed.** The template derives both automatically.
 - **`commits` (top-level):** Newest-first. Omit entirely for Mode A.
 - **`commits` (per-section):** Short hashes of commits touching this file. Omit for Mode A.
 - **`related`:** Array of file path strings. Detect from: imports, caller→callee, same-commit co-changes, migration+schema pairs, test+implementation pairs. 1–3 links per section max. The template automatically groups related sections into a collapsible visual container — no extra markup needed.
-- **`code.line`:** Actual source line number from diff hunk headers. Use `""` for separator/comment lines in grouped sections.
 - **`breaking`:** Only for genuine caller-breaking changes: renamed function, changed signature, removed parameter/feature, changed return type/default. Not for new features, bug fixes, or internal refactors.
 - **`why`:** Mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - **`how`:** Mandatory for non-trivial changes. Describe approach and tradeoffs, not syntax.
@@ -178,49 +193,10 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
 
 ### Content quality rules
 
-- Include enough surrounding context (function signature, match arm) for orientation — not just changed lines.
-- **Never drop lines from the middle of a code block.** Every line between the first and last line of a snippet must be present — no silent omissions. If a diff hunk shows 12 lines, the code array must have all 12. Especially watch for multi-branch constructs (`if/else`, `match`, `try/catch`): include every branch in full, not just the first arm.
-- **Synthetic comment lines** (`"line": "", "type": "context"`) serve exactly two purposes — no others:
-  1. **Orient the reader** by naming the enclosing scope before/after changed lines (e.g. `// inside send_report()`).
-  2. **Abbreviate large modified blocks** when the change adds or removes many repetitive lines. Show a representative sample of the actual changed lines and summarize the rest (e.g. `// … 4 more similar query arms`).
-  Never use synthetic comments to bridge the gap between separate hunks, to replace unchanged code between changes, or to substitute for changed lines that should be shown in full. Use `//` comments regardless of language — these are reviewer annotations, not real source. Example:
-  ```json
-  { "line": "", "text": "// inside calculate_invoice()", "type": "context" },
-  { "line": 84, "text": "    let total = total + shipping_fee;", "type": "added" },
-  { "line": 85, "text": "    let total = total + handling_fee;", "type": "added" },
-  { "line": "", "text": "// … 4 more similar fee additions", "type": "context" }
-  ```
-  **Mechanical hunk test:** After writing any `code` array, scan the integer `line` values in sequence, skipping `""` entries. If the gap between any two consecutive integers exceeds 5, you have merged separate hunks — stop and split into separate sections.
-
-  **WRONG** — a synthetic comment bridges two separate hunks (gap 78→130 = 52 lines):
-  ```json
-  { "line": 73, "text": "    let total_counts = Entity::find()", "type": "added" },
-  { "line": 74, "text": "        .group_by(Column::ProjectId)", "type": "added" },
-  { "line": 78, "text": "        .all(db).await?;", "type": "added" },
-  { "line": "", "text": "// … second query for labeled counts …", "type": "context" },
-  { "line": 130, "text": "    total_items: total_map.get(&m.id).copied().unwrap_or(0),", "type": "added" }
-  ```
-  The synthetic comment hides a 52-line gap. These are two completely different changes — an aggregate query and a struct field assignment — each needing its own `why`/`how`.
-
-  **CORRECT** — two separate section entries, one per hunk:
-  ```json
-  { "file": "src/projects/server.rs", "desc": "Add GROUP BY query for total item counts",
-    "after": { "code": [
-      { "line": 73, "text": "    let total_counts = Entity::find()", "type": "added" },
-      { "line": 74, "text": "        .group_by(Column::ProjectId)", "type": "added" },
-      { "line": 78, "text": "        .all(db).await?;", "type": "added" }
-    ], "identifiers": [], "explanation": "Batch query returns per-project counts." },
-    "why": "N+1 queries on the project list caused timeouts with >50 projects." },
-  { "file": "src/projects/server.rs", "desc": "Populate total_items from query result map",
-    "after": { "code": [
-      { "line": 130, "text": "    total_items: total_map.get(&m.id).copied().unwrap_or(0),", "type": "added" }
-    ], "identifiers": [], "explanation": "Reads pre-fetched count from the result map." },
-    "why": "Progress bars showed 0/0 because the field was always hardcoded to zero." }
-  ```
-- **One logical change per snippet.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), do NOT concatenate them into a single code block. Each hunk is a distinct change — show each one in its own snippet. Split the file into multiple section entries (same `file` path, different `desc`/`before`/`after`/`why` for each change). This prevents unrelated changes from appearing as one continuous block and lets each change have its own explanation.
+- **One section per logical change.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), emit one section per hunk — same `file` path, separate `desc`/`why`/`how`/`when`/`where`. The build script matches each section to a hunk by keyword scoring; grouping multiple hunks into one section prevents correct matching.
 - Key identifiers should cover types, functions, fields a newcomer needs defined. Skip trivial ones (`i`, `db`, `Ok`). Include `kind` (function, variable, interface, type, class, const, enum) and `type` (type signature) when available — these help reviewers understand what each identifier is at a glance.
 - `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
-- For deleted files: `after: null`, populate `before` with key removed code using `"removed"` type.
+- For deleted files: `after: null`.
 - For renamed files: include `oldFile`. Template shows "Renamed from …" automatically.
 
 ### Example section (modified file)
@@ -238,22 +214,14 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
   "breakingDetail": "<code>AuthMiddleware::new()</code> now requires a <code>RefreshConfig</code> parameter.",
   "context": "This middleware intercepts every authenticated request and validates the JWT.",
   "before": {
-    "code": [
-      { "line": 31, "text": "pub fn new(secret: &str) -> Self {", "type": "context" },
-      { "line": 32, "text": "    Self { secret: secret.to_owned() }", "type": "removed" },
-      { "line": 33, "text": "}", "type": "context" }
-    ],
+    "code": [],
     "identifiers": [
       { "name": "AuthMiddleware", "desc": "Tower middleware for JWT validation" }
     ],
     "explanation": "The constructor only took a secret string."
   },
   "after": {
-    "code": [
-      { "line": 31, "text": "pub fn new(secret: &str, refresh: RefreshConfig) -> Self {", "type": "added" },
-      { "line": 32, "text": "    Self { secret: secret.to_owned(), refresh }", "type": "added" },
-      { "line": 33, "text": "}", "type": "context" }
-    ],
+    "code": [],
     "identifiers": [
       { "name": "RefreshConfig", "desc": "Holds grace_period and max_refreshes" }
     ],
@@ -266,7 +234,7 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
 }
 ```
 
-**Multiple hunks in one file → multiple sections.** When a diff has separate hunks in the same file (e.g. a new helper at line 20 and a refactored query at line 95), emit one section per logical change. The template handles duplicate file paths by appending a suffix to the DOM id. Example — two sections for the same file:
+**Multiple hunks in one file → multiple sections.** When a diff has separate hunks in the same file (e.g. a new helper at line 20 and a refactored query at line 95), emit one section per logical change. The template handles duplicate file paths by appending a suffix to the DOM id. Example — two sections for the same file (note `"code": []`; the build script fills these in):
 
 ```json
 [
@@ -277,13 +245,7 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
     "added": 6, "removed": 0,
     "before": null,
     "after": {
-      "code": [
-        { "line": "", "text": "// inside send_report()", "type": "context" },
-        { "line": 42, "text": "    let parsed_ids: Vec<i32> = recipient_ids.iter().filter_map(|s| s.parse::<i32>().ok()).collect();", "type": "added" },
-        { "line": 43, "text": "    let recipient_users = Users::Entity::find()", "type": "added" },
-        { "line": 44, "text": "        .filter(Users::Column::Id.is_in(parsed_ids))", "type": "added" },
-        { "line": 45, "text": "        .all(db).await.map_err(|e| e.to_string())?;", "type": "added" }
-      ],
+      "code": [],
       "identifiers": [{ "name": "parsed_ids", "desc": "Validated i32 user IDs parsed from string input" }],
       "explanation": "New block resolves recipient IDs to active user emails."
     },
@@ -298,22 +260,12 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
     "desc": "Run report queries concurrently with try_join!",
     "added": 12, "removed": 18,
     "before": {
-      "code": [
-        { "line": "", "text": "// inside gather_report_data()", "type": "context" },
-        { "line": 95, "text": "    let new_count = query_new(db).await?;", "type": "removed" },
-        { "line": 96, "text": "    let resolved_count = query_resolved(db).await?;", "type": "removed" }
-      ],
+      "code": [],
       "identifiers": [],
       "explanation": "Queries ran sequentially — each awaited before the next."
     },
     "after": {
-      "code": [
-        { "line": "", "text": "// inside gather_report_data()", "type": "context" },
-        { "line": 95, "text": "    let (new_count, resolved_count) = tokio::try_join!(", "type": "added" },
-        { "line": 96, "text": "        query_new(db),", "type": "added" },
-        { "line": 97, "text": "        query_resolved(db),", "type": "added" },
-        { "line": 98, "text": "    )?;", "type": "added" }
-      ],
+      "code": [],
       "identifiers": [{ "name": "tokio::try_join!", "desc": "Runs futures concurrently, short-circuits on first error" }],
       "explanation": "Queries now run concurrently via <code>try_join!</code>."
     },
@@ -325,72 +277,30 @@ Keep each field to 1–3 sentences. If you need more, the change should be broke
 ]
 ```
 
-For `status: "new"` → set `before: null`, all code lines use type `"added"`.
-For `status: "deleted"` → set `after: null`, all code lines use type `"removed"`.
+For `status: "new"` → set `before: null`.
+For `status: "deleted"` → set `after: null`.
 For `status: "renamed"` → add `"oldFile": "<original path>"`.
 
-### Self-check before writing `review.json`
+## Step 5 — Build the review
 
-Before writing the file, scan every `code` array in your draft:
+Run the build script, which assigns hunks to sections, validates, and produces the HTML:
 
-1. Collect all entries where `line` is an integer (skip `""` entries).
-2. For each consecutive pair, compute the gap (`b - a`).
-3. If any gap exceeds 5, that block merges separate hunks — split that section into two entries now, each with its own `desc`, `before`/`after`, and `why`/`how`/`when`/`where`.
-
-Do not proceed to Step 4 until every `code` array passes this check.
-
-## Step 4 — Validate, inject, and write
-
-Run as a **single** script:
-
-```python
-python3 - <<'EOF'
-import json, os
-
-with open('scratchpad/review.json', encoding='utf-8') as f:
-    data = json.load(f)
-
-def check_hunk_gaps(data, max_gap=5):
-    violations = []
-    for tab, entries in data.get('sections', {}).items():
-        for entry in entries:
-            for block_name in ('before', 'after'):
-                block = entry.get(block_name)
-                if not isinstance(block, dict):
-                    continue
-                prev = None
-                for item in block.get('code', []):
-                    ln = item.get('line')
-                    if isinstance(ln, int):
-                        if prev is not None and ln - prev > max_gap:
-                            violations.append(
-                                f"  {entry['file']} ({block_name}): line {prev} → {ln} (gap {ln - prev}) — split into separate sections"
-                            )
-                        prev = ln
-    return violations
-
-violations = check_hunk_gaps(data)
-if violations:
-    raise ValueError("Merged hunks detected — fix before injecting:\n" + "\n".join(violations))
-
-tpl = os.path.expanduser('~/.claude/skills/code-review/templates/code-review-template.html')
-with open(tpl, encoding='utf-8') as f:
-    template = f.read()
-
-json_str = json.dumps(data, ensure_ascii=False)
-result = template.replace(
-    '<script id="review-data" type="application/json">{}</script>',
-    f'<script id="review-data" type="application/json">{json_str}</script>')
-
-assert json_str in result, "injection failed"
-
-with open('code-review.html', 'w', encoding='utf-8') as f:
-    f.write(result)
-
-print(f"Done: {len(result)} bytes, sections: {({k: len(v) for k, v in data.get('sections', {}).items()})}")
-EOF
+```bash
+python3 ~/.claude/skills/code-review/scripts/build_review.py \
+  scratchpad/hunks.json \
+  scratchpad/review.json \
+  ~/.claude/skills/code-review/templates/code-review-template.html \
+  code-review.html
 ```
 
-## Step 5 — Report
+The script prints a summary of sections rebuilt, gap violations, missing before/after blocks, and context-only blocks. If it exits 1, read the output to identify the issue:
+
+- **Gap violation** (`GAP: file (before): 73 → 130`) — that section is matching a hunk that spans two changes. Split the section into two entries with distinct `desc`/`why` so the keyword scorer can route each to the right hunk.
+- **NO BEFORE / NO AFTER** — no hunk in `hunks.json` matched this section. Check that the section's `desc`, `why`, `how` contain keywords from the actual diff lines. Adjust the wording or check that the file path matches exactly.
+- **CONTEXT-ONLY** — the matched hunk had no added/removed lines on that side. Verify `status` is set correctly (`new`/`deleted`/`modified`).
+
+Fix the violations in `scratchpad/review.json` and re-run until exit 0.
+
+## Step 6 — Report
 
 Tell the user the output path and a one-line summary of how many changes were documented.
