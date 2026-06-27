@@ -90,15 +90,15 @@ Omit any tab key with zero entries.
 
 Each section MUST include structured annotations explaining the change. These render as a labeled block in the template.
 
-**WHY** — State the problem, requirement, bug, or goal that motivated this change. Name the root cause, not the symptom. Reference ticket IDs, error messages, or user-reported issues when available. Write for someone who has never seen the original bug.
+**WHY** — State the problem, requirement, bug, or goal that motivated this change. Name the root cause, not the symptom. Reference ticket IDs, error messages, or user-reported issues when available. Write for someone who has never seen the original bug. Explain why the old behavior was wrong or insufficient — not just what changed. Aim for 3–5 sentences for any non-trivial change.
 
-**HOW** — Explain what the new code does to address the WHY. Describe the approach and key technical decisions — not a line-by-line narration of syntax. If you chose this approach over a more obvious alternative, note the tradeoff in one sentence so future developers don't revert to the broken approach.
+**HOW** — Explain what the new code does to address the WHY. Describe the approach and key technical decisions — not a line-by-line narration of syntax. If you chose this approach over a more obvious alternative, note the tradeoff and explain why the alternative was rejected, so future developers don't revert to the broken approach. Describe the data flow, control flow, or state change in enough detail that a reader can follow the logic without opening the file. Aim for 3–5 sentences.
 
-**WHEN** — Describe the runtime conditions, user actions, data states, or system configurations under which this code path activates. This helps maintainers know when to test it, when to suspect it during debugging, and which users or environments are affected.
+**WHEN** — Describe the runtime conditions, user actions, data states, or system configurations under which this code path activates. This helps maintainers know when to test it, when to suspect it during debugging, and which users or environments are affected. Include edge cases, error states, or concurrency scenarios where relevant. Name specific triggers (e.g. "on every authenticated HTTP request", "when the queue is empty", "only on first render"). Aim for 2–4 sentences.
 
-**WHERE** — Name the files, modules, components, APIs, hooks, or downstream systems that depend on, call, or are affected by this change. This maps the blast radius so reviewers and future maintainers know what else to check or update.
+**WHERE** — Name the files, modules, components, APIs, hooks, or downstream systems that depend on, call, or are affected by this change. This maps the blast radius so reviewers and future maintainers know what else to check or update. Include both direct callers and indirect consumers — tests, configuration, documentation, and external contracts that may need to change. Aim for 2–4 sentences.
 
-Write as much as needed to make each field genuinely useful to someone reading this code cold in six months. Clarity trumps brevity. For trivially obvious changes (typo fixes, formatting, renames with self-evident names), a short `why` alone is sufficient — omit `how`/`when`/`where`. When a section covers a diff that mixes multiple unrelated concerns, open `why` with a one-sentence summary and break each concern into a numbered item with its own before/after/why narrative.
+Write as much as needed to make each field genuinely useful to someone reading this code cold in six months. Clarity trumps brevity. For trivially obvious changes (typo fixes, formatting, renames with self-evident names), a short `why` alone is sufficient — omit `how`/`when`/`where`. When a section covers a diff that mixes multiple unrelated concerns, open `why` with a one-sentence summary and break each concern into a numbered item with its own before/after/why narrative. Never write a single sentence where three would give the full picture.
 
 ### JSON schema
 
