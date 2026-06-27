@@ -285,6 +285,12 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 .cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 52px; }
 .cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 52px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); }
 .cb .added::before, .cb .removed::before { left: 14px; }
+.cb > div.hunk-gap-warning {
+  white-space: normal; padding-left: 12px;
+  background: rgba(251, 191, 36, 0.08); border-left: 2px solid #fbbf24;
+  margin: 2px -12px; color: #fbbf24; font-style: italic; font-size: 11px;
+}
+.cb > div.hunk-gap-warning::before { content: '' !important; width: 0; }
 
 /* Key identifiers */
 .key-ids { margin: 8px 0; }
@@ -769,10 +775,16 @@ a.bc-path { text-decoration: none; }
   // Build code block
   function buildCB(lines) {
     var html = '<div class="cb">';
+    var prevLine = null;
     lines.forEach(function(l) {
+      var ln = (l.line != null && l.line !== '') ? parseInt(String(l.line), 10) : null;
+      if (ln !== null && !isNaN(ln) && prevLine !== null && ln - prevLine > 5) {
+        html += '<div class="hunk-gap-warning" data-line="">⚠ line ' + prevLine + ' → ' + ln + ' — possible merged hunk</div>';
+      }
+      if (ln !== null && !isNaN(ln)) prevLine = ln;
       var cls = l.type === 'added' ? ' class="added"' : l.type === 'removed' ? ' class="removed"' : '';
-      var ln = (l.line != null && l.line !== '') ? String(l.line) : '';
-      html += '<div' + cls + ' data-line="' + esc(ln) + '">' + esc(l.text) + '</div>';
+      var lnStr = (l.line != null && l.line !== '') ? String(l.line) : '';
+      html += '<div' + cls + ' data-line="' + esc(lnStr) + '">' + esc(l.text) + '</div>';
     });
     html += '</div>';
     return html;
