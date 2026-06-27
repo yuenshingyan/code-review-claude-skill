@@ -282,9 +282,9 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 }
 .cb > div { white-space: pre; position: relative; padding-left: 40px; min-height: 1.55em; }
 .cb > div::before { content: attr(data-line); position: absolute; left: 0; width: 32px; text-align: right; color: #4a5568; font-size: 11px; user-select: none; }
-.cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 50px; }
-.cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 50px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); }
-.cb .added::before, .cb .removed::before { left: 12px; }
+.cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 52px; }
+.cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 52px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); }
+.cb .added::before, .cb .removed::before { left: 14px; }
 
 /* Key identifiers */
 .key-ids { margin: 8px 0; }
@@ -300,6 +300,17 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 .explanation strong { color: #e2e8f0; font-weight: 600; }
 h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px 0 4px; }
 .why { color: #8892a4; font-style: italic; font-size: 12px; margin: 4px 0 12px; line-height: 1.55; }
+
+/* WHY/HOW/WHEN/WHERE annotation block */
+.change-annotations { margin: 10px 0 12px; display: flex; flex-direction: column; gap: 0; }
+.annotation-row { display: flex; gap: 0; font-size: 12px; line-height: 1.55; border-bottom: 1px solid #1e242d; }
+.annotation-row:last-child { border-bottom: none; }
+.annotation-label { flex-shrink: 0; width: 52px; padding: 5px 8px 5px 0; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: #4a5568; }
+.annotation-label.lbl-why { color: #4a9eff; }
+.annotation-label.lbl-how { color: #a78bfa; }
+.annotation-label.lbl-when { color: #fbbf24; }
+.annotation-label.lbl-where { color: #f87171; }
+.annotation-text { color: #8892a4; padding: 5px 0; flex: 1; min-width: 0; }
 .note { color: #8892a4; font-size: 11px; margin: 8px 0; padding: 6px 10px; background: rgba(255,255,255,0.02); border: 1px solid #1e242d; border-radius: 3px; }
 .note strong { color: #fbbf24; }
 
@@ -373,6 +384,13 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
   .badge-status.renamed { background: rgba(180,130,0,0.1); color: #8a6d00; border-color: #8a6d00; }
   .badge-status.modified { background: rgba(0,85,204,0.1); color: #0055cc; border-color: #0055cc; }
   p.context, .explanation, .why { color: #555; }
+  .annotation-row { border-bottom-color: #e0e0e0; }
+  .annotation-label { color: #666; }
+  .annotation-label.lbl-why { color: #0055cc; }
+  .annotation-label.lbl-how { color: #7c3aed; }
+  .annotation-label.lbl-when { color: #8a6d00; }
+  .annotation-label.lbl-where { color: #c83232; }
+  .annotation-text { color: #555; }
   .key-ids li { color: #555; }
   .key-ids code { color: #1a1a2e; background: #eee; }
   h4.why-heading { color: #1a1a2e; }
@@ -551,7 +569,7 @@ a.bc-path { text-decoration: none; }
 <div class="breadcrumb-bar" id="breadcrumb-bar"></div>
 <div class="toast" id="toast"></div>
 
-<script id="review-data" type="application/json">{}</script>
+<script id="review-data" type="application/json">{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{"features":[],"fixes":[],"refactors":[],"chores":[]}}</script>
 
 <script>
 (function() {
@@ -858,10 +876,22 @@ a.bc-path { text-decoration: none; }
       html += '<p class="note">' + s.note + '</p>';
     }
 
-    html += '<h4 class="why-heading">Why this changed:</h4>' +
-      '<p class="why">' + s.why + '</p>' +
+    // WHY/HOW/WHEN/WHERE annotations
+    var annotations = ['why', 'how', 'when', 'where'];
+    var hasAnnotations = annotations.some(function(a) { return s[a]; });
+    if (hasAnnotations) {
+      html += '<div class="change-annotations">';
+      annotations.forEach(function(a) {
+        if (s[a]) {
+          html += '<div class="annotation-row">' +
+            '<span class="annotation-label lbl-' + a + '">' + a + '</span>' +
+            '<span class="annotation-text">' + esc(s[a]) + '</span></div>';
+        }
+      });
+      html += '</div>';
+    }
 
-      '<textarea class="reviewer-note" data-file="' + esc(s.id) + '" placeholder="Add a note..."></textarea>' +
+    html += '<textarea class="reviewer-note" data-file="' + esc(s.id) + '" placeholder="Add a note..."></textarea>' +
       '</details></section>';
 
     return html;
@@ -1117,7 +1147,10 @@ a.bc-path { text-decoration: none; }
     }
     codeBlockMd(s.before, 'Before');
     codeBlockMd(s.after, 'After');
-    lines.push('**Why this changed:** ' + (s.why || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
+    var annoLabels = { why: 'WHY', how: 'HOW', when: 'WHEN', where: 'WHERE' };
+    ['why', 'how', 'when', 'where'].forEach(function(a) {
+      if (s[a]) lines.push('**' + annoLabels[a] + ':** ' + s[a].replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
+    });
     return lines.join('\n');
   }
 
