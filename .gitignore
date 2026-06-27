@@ -10,3 +10,5 @@
 
 # Generated review output
 /code-review.html
+
+*.pyc
