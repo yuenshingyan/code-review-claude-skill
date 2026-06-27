@@ -552,6 +552,9 @@ a.bc-path { text-decoration: none; }
 ::-webkit-scrollbar-thumb { background: #3a4150; border-radius: 3px; }
 ::-webkit-scrollbar-track { background: #0e1116; }
 </style>
+<style>/* HLJS_CSS_PLACEHOLDER */
+.hljs { background: transparent; }</style>
+<script>/* HLJS_JS_PLACEHOLDER */</script>
 </head>
 <body>
 <div class="container" id="cr-root"></div>
@@ -772,13 +775,111 @@ a.bc-path { text-decoration: none; }
     return html;
   }
 
+  // Map file extension → highlight.js language name
+  var EXT_TO_LANG = {
+    'js': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
+    'ts': 'typescript', 'tsx': 'typescript', 'jsx': 'javascript',
+    'py': 'python', 'pyw': 'python',
+    'rb': 'ruby', 'go': 'go', 'rs': 'rust',
+    'java': 'java', 'kt': 'kotlin', 'kts': 'kotlin', 'scala': 'scala',
+    'c': 'c', 'h': 'c', 'cpp': 'cpp', 'cc': 'cpp', 'cxx': 'cpp', 'hpp': 'cpp',
+    'cs': 'csharp', 'fs': 'fsharp',
+    'sh': 'bash', 'bash': 'bash', 'zsh': 'bash', 'fish': 'bash',
+    'html': 'xml', 'htm': 'xml', 'xml': 'xml', 'svg': 'xml',
+    'css': 'css', 'scss': 'scss', 'less': 'less',
+    'json': 'json', 'jsonc': 'json',
+    'yaml': 'yaml', 'yml': 'yaml',
+    'toml': 'ini', 'ini': 'ini', 'cfg': 'ini',
+    'md': 'markdown', 'markdown': 'markdown',
+    'sql': 'sql', 'php': 'php', 'swift': 'swift',
+    'ex': 'elixir', 'exs': 'elixir',
+    'r': 'r', 'lua': 'lua', 'dart': 'dart', 'vim': 'vim',
+    'tf': 'hcl', 'hcl': 'hcl',
+    'dockerfile': 'dockerfile', 'makefile': 'makefile',
+    'proto': 'protobuf', 'graphql': 'graphql', 'gql': 'graphql',
+    'pl': 'perl', 'pm': 'perl', 'hs': 'haskell', 'lhs': 'haskell',
+    'clj': 'clojure', 'cljs': 'clojure',
+    'erl': 'erlang', 'hrl': 'erlang',
+    'ml': 'ocaml', 'mli': 'ocaml',
+    'pas': 'delphi', 'pp': 'delphi',
+    'nim': 'nim', 'cr': 'crystal', 'jl': 'julia',
+    'zig': 'zig', 'v': 'v',
+    'ps1': 'powershell', 'psm1': 'powershell',
+    'bat': 'dos', 'cmd': 'dos',
+    'coffee': 'coffeescript',
+    'groovy': 'groovy', 'gradle': 'groovy',
+    'tex': 'latex', 'latex': 'latex',
+    'diff': 'diff', 'patch': 'diff'
+  };
+
+  function langFromFile(file) {
+    if (!file) return null;
+    var base = file.split('/').pop();
+    var lower = base.toLowerCase();
+    // Files with no extension (Dockerfile, Makefile, etc.)
+    if (lower === 'dockerfile' || lower.startsWith('dockerfile.')) return 'dockerfile';
+    if (lower === 'makefile' || lower === 'gnumakefile') return 'makefile';
+    var dot = base.lastIndexOf('.');
+    if (dot === -1) return null;
+    var ext = base.slice(dot + 1).toLowerCase();
+    return EXT_TO_LANG[ext] || null;
+  }
+
+  // Split highlight.js-generated HTML by \n, keeping HTML spans balanced across lines.
+  function splitHighlightedLines(html) {
+    var lines = [];
+    var line = '';
+    var openTags = [];
+    var i = 0;
+    while (i < html.length) {
+      if (html[i] === '<') {
+        var j = html.indexOf('>', i);
+        if (j === -1) { line += html.slice(i); break; }
+        var tag = html.slice(i, j + 1);
+        line += tag;
+        if (tag[1] === '/') {
+          openTags.pop();
+        } else if (tag[tag.length - 2] !== '/') {
+          openTags.push(tag);
+        }
+        i = j + 1;
+      } else if (html[i] === '\n') {
+        for (var t = openTags.length - 1; t >= 0; t--) {
+          var m = openTags[t].match(/<([\w-]+)/);
+          if (m) line += '</' + m[1] + '>';
+        }
+        lines.push(line);
+        line = openTags.join('');
+        i++;
+      } else {
+        line += html[i];
+        i++;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
   // Build code block
-  function buildCB(lines) {
+  function buildCB(lines, lang) {
     var html = '<div class="cb">';
-    lines.forEach(function(l) {
+    var hlLines = null;
+    if (typeof hljs !== 'undefined' && lines.length > 0) {
+      try {
+        var fullCode = lines.map(function(l) { return l.text; }).join('\n');
+        var result = (lang && hljs.getLanguage(lang))
+          ? hljs.highlight(fullCode, {language: lang, ignoreIllegals: true})
+          : hljs.highlightAuto(fullCode);
+        hlLines = splitHighlightedLines(result.value);
+      } catch (e) {
+        hlLines = null;
+      }
+    }
+    lines.forEach(function(l, i) {
       var cls = l.type === 'added' ? ' class="added"' : l.type === 'removed' ? ' class="removed"' : '';
       var ln = (l.line != null && l.line !== '') ? String(l.line) : '';
-      html += '<div' + cls + ' data-line="' + esc(ln) + '">' + esc(l.text) + '</div>';
+      var content = (hlLines && hlLines[i] !== undefined) ? hlLines[i] : esc(l.text);
+      html += '<div' + cls + ' data-line="' + esc(ln) + '">' + content + '</div>';
     });
     html += '</div>';
     return html;
@@ -798,11 +899,11 @@ a.bc-path { text-decoration: none; }
   }
 
   // Build a diff column (before or after)
-  function buildDiffCol(block, label) {
+  function buildDiffCol(block, label, lang) {
     var fcHtml = block.function_context ? '<div class="fn-context">' + esc(block.function_context) + '</div>' : '';
     return '<div class="diff-col"><h5>' + label + '</h5>' +
       fcHtml +
-      buildCB(block.code) +
+      buildCB(block.code, lang) +
       buildIds(block.identifiers) + '</div>';
   }
 
@@ -860,16 +961,17 @@ a.bc-path { text-decoration: none; }
     }
 
     // Diff layout
+    var sLang = langFromFile(s.file);
     if (s.before && s.after) {
       // Side-by-side
       html += '<div class="diff-columns">' +
-        buildDiffCol(s.before, 'Before') +
-        buildDiffCol(s.after, 'After') +
+        buildDiffCol(s.before, 'Before', sLang) +
+        buildDiffCol(s.after, 'After', sLang) +
         '</div>';
     } else if (s.before && !s.after) {
       // Deletion-only: show before block full-width
       var fcBefore = s.before.function_context ? '<div class="fn-context">' + esc(s.before.function_context) + '</div>' : '';
-      html += '<div class="diff-full">' + fcBefore + buildCB(s.before.code) + '</div>';
+      html += '<div class="diff-full">' + fcBefore + buildCB(s.before.code, sLang) + '</div>';
       if (s.before.identifiers && s.before.identifiers.length > 0) {
         html += buildIds(s.before.identifiers);
       }
@@ -877,7 +979,7 @@ a.bc-path { text-decoration: none; }
     } else if (s.after) {
       // Addition-only: show after block full-width
       var fcAfter = s.after.function_context ? '<div class="fn-context">' + esc(s.after.function_context) + '</div>' : '';
-      html += '<div class="diff-full">' + fcAfter + buildCB(s.after.code) + '</div>';
+      html += '<div class="diff-full">' + fcAfter + buildCB(s.after.code, sLang) + '</div>';
       if (s.after.identifiers && s.after.identifiers.length > 0) {
         html += buildIds(s.after.identifiers);
       }
