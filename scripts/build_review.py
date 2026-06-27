@@ -5,17 +5,16 @@ Usage:
     python3 build_review.py <hunks.json> <review.json> <template.html> <output.html>
 
 Steps:
-1. Assign parsed diff hunks to review sections as before/after code blocks
+1. Match review sections to parsed diff hunks by line number
 2. Validate (hunk gaps, missing blocks)
 3. Inject the final JSON into the HTML template
 4. Write output HTML
 
 Hunk matching strategy:
-- Extract keywords from section desc/identifiers/context/why/how
-- For modified sections: prefer a paired hunk (both removed+added with
-  keywords on both sides, >=2 changed lines each side)
-- Fall back to independent before/after matching by keyword score
-- Track claimed hunks per file to avoid double-assignment
+- Each section specifies a "lines" array of old_start line numbers
+- The build script looks up each line number in the file's hunk list
+- Multiple line numbers produce merged code blocks with separators
+- No keyword scoring or claimed-set tracking needed
 
 Exit code 0 on success, 1 if hunk gap violations or injection failure.
 """
@@ -25,134 +24,71 @@ import os
 import json
 
 
-def has_changes(hunk, side, change_type):
-    return any(item['type'] == change_type for item in hunk.get(side, []))
+def read_source_lines(file_path):
+    """Read a source file and return a list of lines (0-indexed)."""
+    for candidate in [file_path, os.path.join('.', file_path)]:
+        if os.path.isfile(candidate):
+            with open(candidate, encoding='utf-8', errors='replace') as f:
+                return f.readlines()
+    return None
 
 
-def hunk_all_text(hunk, side):
-    return ' '.join(item['text'] for item in hunk.get(side, []))
+# Cache to avoid re-reading the same file multiple times
+_source_cache = {}
 
 
-def hunk_changed_text(hunk, side, change_type):
-    return ' '.join(item['text'] for item in hunk.get(side, []) if item['type'] == change_type)
+def get_source_lines(file_path):
+    if file_path not in _source_cache:
+        _source_cache[file_path] = read_source_lines(file_path)
+    return _source_cache[file_path]
 
 
-def n_changed(hunk, side, change_type):
-    return sum(1 for h in hunk.get(side, []) if h['type'] == change_type)
-
-
-STOP_WORDS = {'this', 'that', 'with', 'from', 'into', 'each', 'when', 'then',
-              'will', 'uses', 'used', 'adds', 'code', 'line', 'file', 'data',
-              'also', 'same', 'were', 'been', 'have', 'more', 'only', 'page',
-              'item', 'items', 'project', 'every', 'call', 'runs'}
-
-
-def extract_keywords(section):
-    words = set()
-    for field in ('desc', 'context', 'why', 'how'):
-        text = section.get(field, '') or ''
-        for w in text.replace('/', ' ').replace('_', ' ').replace('<code>', ' ').replace('</code>', ' ').split():
-            if len(w) > 3:
-                words.add(w.lower().rstrip('.,;:'))
-    for block_name in ('before', 'after'):
-        block = section.get(block_name)
-        if isinstance(block, dict):
-            for ident in block.get('identifiers', []):
-                name = ident.get('name', '')
-                if name:
-                    words.add(name.lower())
-                    for p in name.split('_'):
-                        if len(p) > 3:
-                            words.add(p.lower())
-    words -= STOP_WORDS
-    return list(words)
-
-
-def score_hunk(hunk, side, keywords):
-    text = hunk_all_text(hunk, side).lower()
-    return sum(1 for kw in keywords if kw in text)
-
-
-def score_hunk_changed(hunk, side, change_type, keywords):
-    text = hunk_changed_text(hunk, side, change_type).lower()
-    return sum(1 for kw in keywords if kw in text)
-
-
-def find_best_hunk(section, hunks, side, change_type, exclude=None):
-    keywords = extract_keywords(section)
-    candidates = []
-    for i, hunk in enumerate(hunks):
-        if exclude and i in exclude:
-            continue
-        if not has_changes(hunk, side, change_type):
-            continue
-        kw = score_hunk(hunk, side, keywords)
-        n = n_changed(hunk, side, change_type)
-        candidates.append((kw, n, i, hunk))
-    if not candidates:
-        return None, None, 0
-    candidates.sort(key=lambda x: (-x[0], -x[1]))
-    return candidates[0][3], candidates[0][2], candidates[0][0]
-
-
-def merge_hunk_sides(hunks, side):
-    """Merge code arrays from multiple hunks into one, inserting a separator
-    between non-adjacent hunks."""
+def merge_hunk_sides(hunks, side, file_path=None):
+    """Merge code arrays from multiple hunks into one. When a source file
+    is available, fill gaps between hunks with actual source lines as context.
+    Otherwise insert a '...' separator."""
     if not hunks:
         return []
-    sorted_hunks = sorted(hunks, key=lambda h: h.get(side, [{}])[0].get('line', 0) if h.get(side) else 0)
     merged = []
-    for hunk in sorted_hunks:
+    for hunk in hunks:
         code = hunk.get(side, [])
         if not code:
             continue
         if merged:
-            merged.append({'line': '', 'text': '...', 'type': 'separator'})
+            last_line = None
+            for item in reversed(merged):
+                ln = item.get('line')
+                if isinstance(ln, int):
+                    last_line = ln
+                    break
+            first_line = None
+            for item in code:
+                ln = item.get('line')
+                if isinstance(ln, int):
+                    first_line = ln
+                    break
+
+            filled = False
+            if last_line is not None and first_line is not None and file_path:
+                gap_start = last_line  # last_line is already in merged
+                gap_end = first_line    # first_line will be added with the hunk
+                if gap_end > gap_start + 1:
+                    source = get_source_lines(file_path)
+                    if source:
+                        merged.append({'line': '', 'text': '...', 'type': 'separator'})
+                        for ln in range(gap_start + 1, gap_end):
+                            idx = ln - 1  # 0-indexed
+                            if 0 <= idx < len(source):
+                                merged.append({
+                                    'line': ln,
+                                    'text': source[idx].rstrip('\n'),
+                                    'type': 'context'
+                                })
+                        filled = True
+            if not filled:
+                merged.append({'line': '', 'text': '...', 'type': 'separator'})
         merged.extend(code)
     return merged
-
-
-def find_all_matching_hunks(section, hunks, side, change_type, exclude=None, min_score=0):
-    """Find additional hunks that match a section with score >= min_score.
-    Returns list of (hunk, index) pairs sorted by score descending."""
-    keywords = extract_keywords(section)
-    if not keywords:
-        return []
-    threshold = max(3, min_score // 2)
-    matches = []
-    for i, hunk in enumerate(hunks):
-        if exclude and i in exclude:
-            continue
-        if not has_changes(hunk, side, change_type):
-            continue
-        kw = score_hunk(hunk, side, keywords)
-        if kw >= threshold:
-            matches.append((kw, i, hunk))
-    matches.sort(key=lambda x: (-x[0],))
-    return [(h, i) for _, i, h in matches]
-
-
-def find_paired_hunk(section, hunks, exclude=None):
-    """Find a single hunk with both removed AND added lines, keywords on
-    both sides, and at least 2 changed lines on each side."""
-    keywords = extract_keywords(section)
-    candidates = []
-    for i, hunk in enumerate(hunks):
-        if exclude and i in exclude:
-            continue
-        nr = n_changed(hunk, 'before', 'removed')
-        na = n_changed(hunk, 'after', 'added')
-        if nr < 2 or na < 2:
-            continue
-        kw_r = score_hunk_changed(hunk, 'before', 'removed', keywords)
-        kw_a = score_hunk_changed(hunk, 'after', 'added', keywords)
-        if kw_r == 0 or kw_a == 0:
-            continue
-        candidates.append((kw_r + kw_a, nr + na, i, hunk))
-    if not candidates:
-        return None, None, 0
-    candidates.sort(key=lambda x: (-x[0], -x[1]))
-    return candidates[0][3], candidates[0][2], candidates[0][0]
 
 
 def preserve_field(section, block_name, field):
@@ -162,106 +98,69 @@ def preserve_field(section, block_name, field):
     return [] if field == 'identifiers' else ''
 
 
+def build_hunk_index(hunks):
+    """Build a dict from old_start line number to hunk for O(1) lookup."""
+    index = {}
+    for hunk in hunks:
+        index[hunk['old_start']] = hunk
+    return index
+
+
 def rebuild(review, parsed):
     file_hunks = {}
     for entry in parsed:
-        file_hunks[entry['file']] = entry['hunks']
-
-    file_claimed = {}
+        file_hunks[entry['file']] = build_hunk_index(entry['hunks'])
 
     for tab, entries in review['sections'].items():
         for section in entries:
             file_path = section['file']
-            hunks = file_hunks.get(file_path, [])
-            if not hunks:
+            hunk_index = file_hunks.get(file_path, {})
+            if not hunk_index:
                 continue
 
             status = section.get('status', 'modified')
-            claimed = file_claimed.setdefault(file_path, set())
+            line_numbers = section.get('lines', [])
+            if not line_numbers:
+                continue
+
+            matched_hunks = []
+            for ln in line_numbers:
+                hunk = hunk_index.get(ln)
+                if hunk:
+                    matched_hunks.append(hunk)
+
+            if not matched_hunks:
+                continue
 
             if status == 'new':
-                best, idx, _ = find_best_hunk(section, hunks, 'after', 'added', exclude=claimed)
-                if best:
-                    if idx is not None:
-                        claimed.add(idx)
-                    section['before'] = None
-                    section['after'] = {
-                        'code': best['after'],
-                        'function_context': best.get('function_context', ''),
-                        'identifiers': preserve_field(section, 'after', 'identifiers'),
-                        'explanation': preserve_field(section, 'after', 'explanation'),
-                    }
+                section['before'] = None
+                section['after'] = {
+                    'code': merge_hunk_sides(matched_hunks, 'after', file_path),
+                    'function_context': matched_hunks[0].get('function_context', ''),
+                    'identifiers': preserve_field(section, 'after', 'identifiers'),
+                    'explanation': preserve_field(section, 'after', 'explanation'),
+                }
             elif status == 'deleted':
-                best, idx, _ = find_best_hunk(section, hunks, 'before', 'removed', exclude=claimed)
-                if best:
-                    if idx is not None:
-                        claimed.add(idx)
-                    section['before'] = {
-                        'code': best['before'],
-                        'function_context': best.get('function_context', ''),
-                        'identifiers': preserve_field(section, 'before', 'identifiers'),
-                        'explanation': preserve_field(section, 'before', 'explanation'),
-                    }
-                    section['after'] = None
+                section['before'] = {
+                    'code': merge_hunk_sides(matched_hunks, 'before'),
+                    'function_context': matched_hunks[0].get('function_context', ''),
+                    'identifiers': preserve_field(section, 'before', 'identifiers'),
+                    'explanation': preserve_field(section, 'before', 'explanation'),
+                }
+                section['after'] = None
             else:
-                paired, pidx, pscore = find_paired_hunk(section, hunks, exclude=claimed)
-                if paired:
-                    if pidx is not None:
-                        claimed.add(pidx)
-                    before_hunks = [paired]
-                    after_hunks = [paired]
-                    extra_before = find_all_matching_hunks(section, hunks, 'before', 'removed', exclude=claimed, min_score=pscore)
-                    extra_after = find_all_matching_hunks(section, hunks, 'after', 'added', exclude=claimed, min_score=pscore)
-                    for h, i in extra_before:
-                        before_hunks.append(h)
-                        claimed.add(i)
-                    for h, i in extra_after:
-                        if i not in claimed:
-                            after_hunks.append(h)
-                            claimed.add(i)
-                    section['before'] = {
-                        'code': merge_hunk_sides(before_hunks, 'before'),
-                        'function_context': paired.get('function_context', ''),
-                        'identifiers': preserve_field(section, 'before', 'identifiers'),
-                        'explanation': preserve_field(section, 'before', 'explanation'),
-                    }
-                    section['after'] = {
-                        'code': merge_hunk_sides(after_hunks, 'after'),
-                        'function_context': paired.get('function_context', ''),
-                        'identifiers': preserve_field(section, 'after', 'identifiers'),
-                        'explanation': preserve_field(section, 'after', 'explanation'),
-                    }
-                else:
-                    before_hunk, bidx, bscore = find_best_hunk(section, hunks, 'before', 'removed', exclude=claimed)
-                    after_hunk, aidx, ascore = find_best_hunk(section, hunks, 'after', 'added', exclude=claimed)
-                    if bidx is not None:
-                        claimed.add(bidx)
-                    if aidx is not None:
-                        claimed.add(aidx)
-
-                    if before_hunk:
-                        before_hunks = [before_hunk]
-                        for h, i in find_all_matching_hunks(section, hunks, 'before', 'removed', exclude=claimed, min_score=bscore):
-                            before_hunks.append(h)
-                            claimed.add(i)
-                        section['before'] = {
-                            'code': merge_hunk_sides(before_hunks, 'before'),
-                            'function_context': before_hunk.get('function_context', ''),
-                            'identifiers': preserve_field(section, 'before', 'identifiers'),
-                            'explanation': preserve_field(section, 'before', 'explanation'),
-                        }
-                    if after_hunk:
-                        after_hunks = [after_hunk]
-                        for h, i in find_all_matching_hunks(section, hunks, 'after', 'added', exclude=claimed, min_score=ascore):
-                            if i not in claimed:
-                                after_hunks.append(h)
-                                claimed.add(i)
-                        section['after'] = {
-                            'code': merge_hunk_sides(after_hunks, 'after'),
-                            'function_context': after_hunk.get('function_context', ''),
-                            'identifiers': preserve_field(section, 'after', 'identifiers'),
-                            'explanation': preserve_field(section, 'after', 'explanation'),
-                        }
+                section['before'] = {
+                    'code': merge_hunk_sides(matched_hunks, 'before'),
+                    'function_context': matched_hunks[0].get('function_context', ''),
+                    'identifiers': preserve_field(section, 'before', 'identifiers'),
+                    'explanation': preserve_field(section, 'before', 'explanation'),
+                }
+                section['after'] = {
+                    'code': merge_hunk_sides(matched_hunks, 'after', file_path),
+                    'function_context': matched_hunks[0].get('function_context', ''),
+                    'identifiers': preserve_field(section, 'after', 'identifiers'),
+                    'explanation': preserve_field(section, 'after', 'explanation'),
+                }
 
 
 def validate(review):
@@ -269,9 +168,13 @@ def validate(review):
     violations = 0
     no_before = 0
     no_after = 0
+    no_lines = 0
     context_only = 0
     for tab, entries in review['sections'].items():
         for section in entries:
+            if not section.get('lines'):
+                no_lines += 1
+                print(f"  NO LINES: {section['file']}: {section['desc']}")
             if section.get('status') == 'modified':
                 if section.get('before') is None:
                     no_before += 1
@@ -301,6 +204,7 @@ def validate(review):
                         prev = ln
     print(f"\n{total} sections rebuilt")
     print(f"Gap violations: {violations}")
+    print(f"Missing lines field: {no_lines}")
     print(f"Modified missing before: {no_before}")
     print(f"Modified missing after: {no_after}")
     print(f"Context-only blocks: {context_only}")
