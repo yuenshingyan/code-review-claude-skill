@@ -285,6 +285,7 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 .cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 50px; }
 .cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 50px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); }
 .cb .added::before, .cb .removed::before { left: 10px; }
+.cb .hunk-sep { color: #4a5568; font-style: italic; text-align: center; padding: 2px 0; min-height: auto; background: rgba(255,255,255,0.03); border-top: 1px dashed #272d38; border-bottom: 1px dashed #272d38; margin: 4px 0; user-select: none; }
 
 /* Key identifiers */
 .key-ids { margin: 8px 0; }
@@ -848,23 +849,39 @@ a.bc-path { text-decoration: none; }
   // Build code block
   function buildCB(lines, lang) {
     var html = '<div class="cb">';
-    var hlLines = null;
-    if (typeof hljs !== 'undefined' && lines.length > 0) {
-      try {
-        var fullCode = lines.map(function(l) { return l.text; }).join('\n');
-        var result = (lang && hljs.getLanguage(lang))
-          ? hljs.highlight(fullCode, {language: lang, ignoreIllegals: true})
-          : hljs.highlightAuto(fullCode);
-        hlLines = splitHighlightedLines(result.value);
-      } catch (e) {
-        hlLines = null;
+    // Split lines into segments separated by separator markers for independent highlighting
+    var segments = [[]];
+    lines.forEach(function(l) {
+      if (l.type === 'separator') {
+        segments.push(null); // null = separator
+        segments.push([]);
+      } else {
+        segments[segments.length - 1].push(l);
       }
-    }
-    lines.forEach(function(l, i) {
-      var cls = l.type === 'added' ? ' class="added"' : l.type === 'removed' ? ' class="removed"' : '';
-      var ln = (l.line != null && l.line !== '') ? String(l.line) : '';
-      var content = (hlLines && hlLines[i] !== undefined) ? hlLines[i] : esc(l.text);
-      html += '<div' + cls + ' data-line="' + esc(ln) + '">' + content + '</div>';
+    });
+    segments.forEach(function(seg) {
+      if (seg === null) {
+        html += '<div class="hunk-sep" data-line="">⋮</div>';
+        return;
+      }
+      var hlLines = null;
+      if (typeof hljs !== 'undefined' && seg.length > 0) {
+        try {
+          var fullCode = seg.map(function(l) { return l.text; }).join('\n');
+          var result = (lang && hljs.getLanguage(lang))
+            ? hljs.highlight(fullCode, {language: lang, ignoreIllegals: true})
+            : hljs.highlightAuto(fullCode);
+          hlLines = splitHighlightedLines(result.value);
+        } catch (e) {
+          hlLines = null;
+        }
+      }
+      seg.forEach(function(l, i) {
+        var cls = l.type === 'added' ? ' class="added"' : l.type === 'removed' ? ' class="removed"' : '';
+        var ln = (l.line != null && l.line !== '') ? String(l.line) : '';
+        var content = (hlLines && hlLines[i] !== undefined) ? hlLines[i] : esc(l.text);
+        html += '<div' + cls + ' data-line="' + esc(ln) + '">' + content + '</div>';
+      });
     });
     html += '</div>';
     return html;
@@ -1227,6 +1244,7 @@ a.bc-path { text-decoration: none; }
       lines.push('### ' + label);
       lines.push('```');
       block.code.forEach(function(l) {
+        if (l.type === 'separator') { lines.push('  ...'); return; }
         var prefix = l.type === 'added' ? '+ ' : l.type === 'removed' ? '- ' : '  ';
         var ln = (l.line != null && l.line !== '') ? String(l.line).padStart(4) + ' ' : '     ';
         lines.push(prefix + ln + l.text);
