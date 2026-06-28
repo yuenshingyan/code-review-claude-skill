@@ -283,8 +283,8 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 }
 .cb > div { white-space: pre; position: relative; padding-left: 40px; min-height: 1.55em; }
 .cb > div::before { content: attr(data-line); position: absolute; left: 0; width: 32px; text-align: right; color: #4a5568; font-size: 11px; user-select: none; }
-.cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 50px; }
-.cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 50px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); }
+.cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 50px; width: max-content; min-width: calc(100% + 24px); }
+.cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 50px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); width: max-content; min-width: calc(100% + 24px); }
 .cb .added::before, .cb .removed::before { left: 10px; }
 .cb .hunk-sep { color: #4a5568; font-style: italic; text-align: center; padding: 2px 0; min-height: auto; background: rgba(255,255,255,0.03); border-top: 1px dashed #272d38; border-bottom: 1px dashed #272d38; margin: 4px 0; user-select: none; }
 
