@@ -559,7 +559,7 @@ a.bc-path { text-decoration: none; }
 </div>
 <div class="toast" id="toast"></div>
 
-<script id="review-data" type="application/json">{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{"features":[],"fixes":[],"refactors":[],"chores":[]}}</script>
+<script id="review-data" type="application/json">{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{}}</script>
 
 <script>
 (function() {
@@ -568,7 +568,9 @@ a.bc-path { text-decoration: none; }
     if (k.startsWith('code-review:')) localStorage.removeItem(k);
   });
   var root = document.getElementById('cr-root');
-  var TAB_LABELS = { features: 'Features', fixes: 'Bug Fixes', refactors: 'Refactors', chores: 'Chores' };
+  function toLabel(key) {
+    return key.replace(/[-_]+/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  }
   var STATUS_LABELS = { 'new': 'CREATED', modified: 'MODIFIED', deleted: 'DELETED', renamed: 'RENAMED' };
 
   // ── Auto-derive id, complexity, related, summary ──────────────
@@ -623,7 +625,7 @@ a.bc-path { text-decoration: none; }
     t._timer = setTimeout(function() { t.classList.remove('show'); }, 2000);
   }
 
-  var tabOrder = ['features', 'fixes', 'refactors', 'chores'].filter(function(t) {
+  var tabOrder = Object.keys(data.sections).filter(function(t) {
     return data.sections[t] && data.sections[t].length > 0;
   });
   var totalSections = data.summary.length;
@@ -699,7 +701,7 @@ a.bc-path { text-decoration: none; }
   var tabBarHTML = '<nav class="tab-bar">' +
     '<button class="tab active" data-tab="summary">Summary <span class="tab-count">' + totalSections + '</span></button>';
   tabOrder.forEach(function(t) {
-    tabBarHTML += '<button class="tab" data-tab="' + t + '">' + TAB_LABELS[t] +
+    tabBarHTML += '<button class="tab" data-tab="' + t + '">' + toLabel(t) +
       ' <span class="tab-count">' + data.sections[t].length + '</span></button>';
   });
   if (hasCommits) {
@@ -719,7 +721,7 @@ a.bc-path { text-decoration: none; }
   var summaryHTML = '<div class="tab-panel active" data-tab="summary">' +
     '<table class="summary-table"><thead><tr><th>File</th><th>Status</th><th>Tab</th><th>Description</th><th class="churn-col">Churn</th></tr></thead><tbody>';
   data.summary.forEach(function(s) {
-    var tabLabel = TAB_LABELS[s.tab] ? TAB_LABELS[s.tab].replace('Bug ', '') : s.tab;
+    var tabLabel = toLabel(s.tab);
     var status = s.status || 'modified';
     var statusCls = status;
     var statusLabel = STATUS_LABELS[status] || status.toUpperCase();
@@ -1476,7 +1478,7 @@ a.bc-path { text-decoration: none; }
   });
   // Add tab actions
   ['summary'].concat(tabOrder).forEach(function(t) {
-    var label = t === 'summary' ? 'Summary' : TAB_LABELS[t];
+    var label = t === 'summary' ? 'Summary' : toLabel(t);
     paletteItems.push({ id: '__tab__' + t, file: 'Go to ' + label + ' tab', desc: '', tab: t, type: 'tab' });
   });
 
@@ -1505,7 +1507,7 @@ a.bc-path { text-decoration: none; }
         html += '<div class="cmd-palette-item' + cls + '" data-idx="' + i + '" data-action="tab" data-tab="' + esc(item.tab) + '">' +
           '<span class="cpi-file">' + esc(item.file) + '</span></div>';
       } else {
-        var tabLabel = TAB_LABELS[item.tab] || item.tab;
+        var tabLabel = toLabel(item.tab);
         html += '<div class="cmd-palette-item' + cls + '" data-idx="' + i + '" data-action="section" data-id="' + esc(item.id) + '" data-tab="' + esc(item.tab) + '">' +
           '<span class="cpi-tab">' + esc(tabLabel) + '</span>' +
           '<span class="cpi-file">' + esc(item.file) + '</span>' +
