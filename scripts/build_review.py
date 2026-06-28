@@ -22,6 +22,7 @@ Exit code 0 on success, 1 if hunk gap violations or injection failure.
 import sys
 import os
 import json
+import re
 
 
 def read_source_lines(file_path):
@@ -43,10 +44,97 @@ def get_source_lines(file_path):
     return _source_cache[file_path]
 
 
+FUNC_SIG_PATTERNS = [
+    re.compile(r'^\s*(pub(\s*\(.*?\))?\s+)?(async\s+)?fn\s+\w'),      # Rust fn
+    re.compile(r'^\s*(async\s+)?def\s+\w'),                             # Python def
+    re.compile(r'^\s*(export\s+)?(default\s+)?(async\s+)?function\s+\w'),  # JS/TS
+    re.compile(r'^\s*(public|private|protected|internal)\b.*\w\s*\('),  # Java/C#/Swift
+]
+
+
+def find_enclosing_signature(source_lines, first_line_1idx, max_lookback=200):
+    """Walk backward from first_line_1idx (1-indexed) to the nearest function
+    signature. For Rust, extends backward to include attached #[...] attributes.
+    Returns 1-indexed line number of the signature start, or None."""
+    stop = max(0, first_line_1idx - max_lookback - 2)
+    for i in range(first_line_1idx - 2, stop, -1):
+        if 0 <= i < len(source_lines):
+            for pat in FUNC_SIG_PATTERNS:
+                if pat.match(source_lines[i]):
+                    sig_start = i
+                    for j in range(i - 1, max(0, i - 10) - 1, -1):
+                        if 0 <= j < len(source_lines) and source_lines[j].lstrip().startswith('#['):
+                            sig_start = j
+                        else:
+                            break
+                    return sig_start + 1  # 1-indexed
+    return None
+
+
+def _signature_preamble(source, sig_start, first_line):
+    """Return context line objects from sig_start up to (not including) first_line.
+    If preamble > 12 lines, include just the signature through '{' + '...' separator."""
+    preamble_count = first_line - sig_start
+    if preamble_count <= 12:
+        return [
+            {'line': ln, 'text': source[ln - 1].rstrip('\n'), 'type': 'context'}
+            for ln in range(sig_start, first_line)
+            if 0 <= ln - 1 < len(source)
+        ]
+    sig_end = sig_start
+    for ln in range(sig_start, min(sig_start + 20, first_line)):
+        if 0 <= ln - 1 < len(source) and '{' in source[ln - 1]:
+            sig_end = ln
+            break
+    lines = [
+        {'line': ln, 'text': source[ln - 1].rstrip('\n'), 'type': 'context'}
+        for ln in range(sig_start, sig_end + 1)
+        if 0 <= ln - 1 < len(source)
+    ]
+    if sig_end + 1 < first_line:
+        lines.append({'line': '', 'text': '...', 'type': 'separator'})
+    return lines
+
+
+def prepend_function_context(code, file_path):
+    """Prepend the enclosing function signature before each code segment.
+    Segments are runs of non-separator lines split by '...' markers, so
+    each function in a multi-hunk section gets its own signature header."""
+    if not code or not file_path:
+        return code
+    source = get_source_lines(file_path)
+    if not source:
+        return code
+
+    segments = []
+    current = []
+    for item in code:
+        if item.get('type') == 'separator':
+            segments.append(('code', current))
+            segments.append(('sep', [item]))
+            current = []
+        else:
+            current.append(item)
+    segments.append(('code', current))
+
+    result = []
+    for kind, items in segments:
+        if kind == 'sep' or not items:
+            result.extend(items)
+            continue
+        first_line = next((it['line'] for it in items if isinstance(it.get('line'), int)), None)
+        if first_line and first_line > 1:
+            sig_start = find_enclosing_signature(source, first_line)
+            if sig_start and sig_start < first_line:
+                result.extend(_signature_preamble(source, sig_start, first_line))
+        result.extend(items)
+    return result
+
+
 def merge_hunk_sides(hunks, side, file_path=None):
-    """Merge code arrays from multiple hunks into one. When a source file
-    is available, fill gaps between hunks with actual source lines as context.
-    Otherwise insert a '...' separator."""
+    """Merge code arrays from multiple hunks into one, separated by '...' markers.
+    Gap lines are never filled: they are always unchanged context, and
+    prepend_function_context handles orientation by showing function signatures."""
     if not hunks:
         return []
     merged = []
@@ -55,38 +143,7 @@ def merge_hunk_sides(hunks, side, file_path=None):
         if not code:
             continue
         if merged:
-            last_line = None
-            for item in reversed(merged):
-                ln = item.get('line')
-                if isinstance(ln, int):
-                    last_line = ln
-                    break
-            first_line = None
-            for item in code:
-                ln = item.get('line')
-                if isinstance(ln, int):
-                    first_line = ln
-                    break
-
-            filled = False
-            if last_line is not None and first_line is not None and file_path:
-                gap_start = last_line  # last_line is already in merged
-                gap_end = first_line    # first_line will be added with the hunk
-                if gap_end > gap_start + 1:
-                    source = get_source_lines(file_path)
-                    if source:
-                        merged.append({'line': '', 'text': '...', 'type': 'separator'})
-                        for ln in range(gap_start + 1, gap_end):
-                            idx = ln - 1  # 0-indexed
-                            if 0 <= idx < len(source):
-                                merged.append({
-                                    'line': ln,
-                                    'text': source[idx].rstrip('\n'),
-                                    'type': 'context'
-                                })
-                        filled = True
-            if not filled:
-                merged.append({'line': '', 'text': '...', 'type': 'separator'})
+            merged.append({'line': '', 'text': '...', 'type': 'separator'})
         merged.extend(code)
     return merged
 
@@ -135,14 +192,14 @@ def rebuild(review, parsed):
             if status == 'new':
                 section['before'] = None
                 section['after'] = {
-                    'code': merge_hunk_sides(matched_hunks, 'after', file_path),
+                    'code': prepend_function_context(merge_hunk_sides(matched_hunks, 'after', file_path), file_path),
                     'function_context': matched_hunks[0].get('function_context', ''),
                     'identifiers': preserve_field(section, 'after', 'identifiers'),
                     'explanation': preserve_field(section, 'after', 'explanation'),
                 }
             elif status == 'deleted':
                 section['before'] = {
-                    'code': merge_hunk_sides(matched_hunks, 'before', file_path),
+                    'code': prepend_function_context(merge_hunk_sides(matched_hunks, 'before', file_path), file_path),
                     'function_context': matched_hunks[0].get('function_context', ''),
                     'identifiers': preserve_field(section, 'before', 'identifiers'),
                     'explanation': preserve_field(section, 'before', 'explanation'),
@@ -150,13 +207,13 @@ def rebuild(review, parsed):
                 section['after'] = None
             else:
                 section['before'] = {
-                    'code': merge_hunk_sides(matched_hunks, 'before', file_path),
+                    'code': prepend_function_context(merge_hunk_sides(matched_hunks, 'before', file_path), file_path),
                     'function_context': matched_hunks[0].get('function_context', ''),
                     'identifiers': preserve_field(section, 'before', 'identifiers'),
                     'explanation': preserve_field(section, 'before', 'explanation'),
                 }
                 section['after'] = {
-                    'code': merge_hunk_sides(matched_hunks, 'after', file_path),
+                    'code': prepend_function_context(merge_hunk_sides(matched_hunks, 'after', file_path), file_path),
                     'function_context': matched_hunks[0].get('function_context', ''),
                     'identifiers': preserve_field(section, 'after', 'identifiers'),
                     'explanation': preserve_field(section, 'after', 'explanation'),
