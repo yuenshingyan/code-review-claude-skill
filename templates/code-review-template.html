@@ -445,18 +445,18 @@ a.bc-path { text-decoration: none; }
 }
 .cmd-palette-input::placeholder { color: #4a5568; }
 .cmd-palette-results {
-  max-height: 320px; overflow-y: auto; padding: 4px 0;
+  max-height: 450px; overflow-y: auto; padding: 4px 0;
 }
 .cmd-palette-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 16px; cursor: pointer; font-size: 12px;
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 7px 16px; cursor: pointer; font-size: 12px;
 }
 .cmd-palette-item:hover, .cmd-palette-item.selected {
   background: rgba(74, 158, 255, 0.1);
 }
 .cmd-palette-item .cpi-file { font-family: 'IBM Plex Mono', monospace; color: #e2e8f0; font-size: 12px; }
-.cmd-palette-item .cpi-desc { color: #4a5568; font-size: 11px; margin-left: auto; }
-.cmd-palette-item .cpi-tab { font-size: 9px; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px; }
+.cmd-palette-item .cpi-tab { font-size: 9px; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+.cmd-palette-item .cpi-desc { color: #4a5568; font-size: 11px; width: 100%; padding-left: 44px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 
 /* Related changes */
