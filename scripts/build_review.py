@@ -211,7 +211,7 @@ def validate(review):
     return violations
 
 
-DEFAULT_PLACEHOLDER = '{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{"features":[],"fixes":[],"refactors":[],"chores":[]}}'
+DEFAULT_PLACEHOLDER = '{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{}}'
 
 
 def _load_vendor_hljs():
