@@ -75,6 +75,8 @@ Read `scratchpad/meta.json` and `scratchpad/hunks.json`. Analyze the diffs and p
 
 Use the values from `meta.json` directly for the top-level `scope`, `stats`, `commits`, and `skipped` fields — do not recompute them.
 
+For each section, look up the corresponding entry in `hunks.json` by `file` path and record the `old_start` value(s) of the matching hunk(s) in the section's `lines` array. For new files (no before side), use `new_start` instead. This is how the build script locates the right code blocks.
+
 ### Tab classification
 
 Choose tab keys that describe the logical groupings in this specific changeset. The keys you write in `sections` become the tab names in the UI — `"bug-fixes"` renders as "Bug Fixes", `"auth-refactor"` as "Auth Refactor". Use kebab-case for multi-word keys; use only `[a-z0-9-_]` characters.
@@ -136,6 +138,7 @@ Write as much as needed to make each field genuinely useful to someone reading t
         "desc": "<short description>",
         "added": 0,
         "removed": 0,
+        "lines": ["<old_start line numbers from hunks.json that belong to this section>"],
         "commits": ["<short hash — omit array for uncommitted mode>"],
         "related": ["<file path>"],
         "breaking": false,
@@ -165,11 +168,12 @@ Write as much as needed to make each field genuinely useful to someone reading t
 }
 ```
 
-Always write `"code": []` — `build_review.py` populates code arrays from `hunks.json` by keyword-matching sections against diff hunks. Write real `identifiers` and `explanation`; the script preserves them.
+Always write `"code": []` — `build_review.py` populates code arrays by looking up the `lines` numbers in `hunks.json`. Write real `identifiers` and `explanation`; the script preserves them.
 
 ### Field rules
 
 - **No `id` or `summary` needed.** The template derives both automatically.
+- **`lines`:** Array of `old_start` integers from `hunks.json` — one per hunk that belongs to this section. Read `hunks.json`, find the hunks for this file by matching `file` path, and list their `old_start` values. For new files (no "before" side) use the hunk's `new_start` instead. Multiple values produce merged code blocks. This is how `build_review.py` locates the right code snippets; without it the section gets a "NO LINES" error.
 - **`commits` (top-level):** Newest-first. From `meta.json`. Empty array for uncommitted mode.
 - **`commits` (per-section):** Short hashes of commits touching this file. Omit for uncommitted mode.
 - **`related`:** Array of file path strings. Detect from: imports, caller→callee, same-commit co-changes, migration+schema pairs, test+implementation pairs. 1–3 links per section max. The template automatically groups related sections into a collapsible visual container — no extra markup needed.
@@ -197,6 +201,7 @@ Always write `"code": []` — `build_review.py` populates code arrays from `hunk
   "desc": "Add JWT token refresh on expiry",
   "added": 42,
   "removed": 8,
+  "lines": [87],
   "commits": ["a1b2c3d"],
   "related": ["src/auth/claims.rs"],
   "breaking": true,
@@ -232,6 +237,7 @@ Always write `"code": []` — `build_review.py` populates code arrays from `hunk
     "status": "modified",
     "desc": "Resolve recipient emails from user IDs",
     "added": 6, "removed": 0,
+    "lines": [20],
     "before": null,
     "after": {
       "code": [],
@@ -248,6 +254,7 @@ Always write `"code": []` — `build_review.py` populates code arrays from `hunk
     "status": "modified",
     "desc": "Run report queries concurrently with try_join!",
     "added": 12, "removed": 18,
+    "lines": [95],
     "before": {
       "code": [],
       "identifiers": [],
@@ -282,8 +289,9 @@ python3 ~/.claude/skills/code-review/scripts/build_review.py \
 
 The script assigns hunks to sections, validates, and produces the HTML. If it exits 1, read the output to identify the issue:
 
-- **Gap violation** (`GAP: file (before): 73 → 130`) — that section is matching a hunk that spans two changes. Split the section into two entries with distinct `desc`/`why` so the keyword scorer can route each to the right hunk.
-- **NO BEFORE / NO AFTER** — no hunk in `hunks.json` matched this section. Check that the section's `desc`, `why`, `how` contain keywords from the actual diff lines. Adjust the wording or check that the file path matches exactly.
+- **NO LINES** — the section's `lines` array is missing or empty. Open `scratchpad/hunks.json`, find the entry for this file, and add the correct `old_start` (or `new_start` for new files) integers to the `lines` array.
+- **Gap violation** (`GAP: file (before): 73 → 130`) — the section references a hunk that spans two separate changes. Split the section into two entries and give each its own `lines` entry pointing to the correct hunk.
+- **NO BEFORE / NO AFTER** — the hunk was matched but the code array is empty on that side. Verify the file path matches exactly and that the `old_start` in `lines` corresponds to the right hunk.
 - **CONTEXT-ONLY** — the matched hunk had no added/removed lines on that side. Verify `status` is set correctly (`new`/`deleted`/`modified`).
 
 Fix the violations in `scratchpad/review.json` and re-run until exit 0.
