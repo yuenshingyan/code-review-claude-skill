@@ -955,6 +955,21 @@ a.bc-path { text-decoration: none; }
       html += '<p class="breaking-detail">' + s.breakingDetail + '</p>';
     }
 
+    // WHY/HOW/WHEN/WHERE annotations
+    var annotations = ['why', 'how', 'when', 'where'];
+    var hasAnnotations = annotations.some(function(a) { return s[a]; });
+    if (hasAnnotations) {
+      html += '<div class="change-annotations">';
+      annotations.forEach(function(a) {
+        if (s[a]) {
+          html += '<div class="annotation-row">' +
+            '<span class="annotation-label lbl-' + a + '">' + a + '</span>' +
+            '<span class="annotation-text">' + s[a] + '</span></div>';
+        }
+      });
+      html += '</div>';
+    }
+
     // Diff layout
     var sLang = langFromFile(s.file);
     if (s.before && s.after) {
@@ -981,21 +996,6 @@ a.bc-path { text-decoration: none; }
 
     if (s.note) {
       html += '<p class="note">' + s.note + '</p>';
-    }
-
-    // WHY/HOW/WHEN/WHERE annotations
-    var annotations = ['why', 'how', 'when', 'where'];
-    var hasAnnotations = annotations.some(function(a) { return s[a]; });
-    if (hasAnnotations) {
-      html += '<div class="change-annotations">';
-      annotations.forEach(function(a) {
-        if (s[a]) {
-          html += '<div class="annotation-row">' +
-            '<span class="annotation-label lbl-' + a + '">' + a + '</span>' +
-            '<span class="annotation-text">' + s[a] + '</span></div>';
-        }
-      });
-      html += '</div>';
     }
 
     html += '<textarea class="reviewer-note" data-file="' + esc(s.id) + '" placeholder="Add a note..."></textarea>' +
