@@ -142,7 +142,7 @@ def rebuild(review, parsed):
                 }
             elif status == 'deleted':
                 section['before'] = {
-                    'code': merge_hunk_sides(matched_hunks, 'before'),
+                    'code': merge_hunk_sides(matched_hunks, 'before', file_path),
                     'function_context': matched_hunks[0].get('function_context', ''),
                     'identifiers': preserve_field(section, 'before', 'identifiers'),
                     'explanation': preserve_field(section, 'before', 'explanation'),
@@ -150,7 +150,7 @@ def rebuild(review, parsed):
                 section['after'] = None
             else:
                 section['before'] = {
-                    'code': merge_hunk_sides(matched_hunks, 'before'),
+                    'code': merge_hunk_sides(matched_hunks, 'before', file_path),
                     'function_context': matched_hunks[0].get('function_context', ''),
                     'identifiers': preserve_field(section, 'before', 'identifiers'),
                     'explanation': preserve_field(section, 'before', 'explanation'),
