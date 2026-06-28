@@ -1582,6 +1582,24 @@ a.bc-path { text-decoration: none; }
     });
   });
 
+  // Synchronized scroll for side-by-side diff panels
+  root.querySelectorAll('.diff-columns').forEach(function(cols) {
+    var panels = cols.querySelectorAll('.diff-col .cb');
+    if (panels.length !== 2) return;
+    var syncing = false;
+    function makeSyncHandler(from, to) {
+      return function() {
+        if (syncing) return;
+        syncing = true;
+        to.scrollTop = from.scrollTop;
+        to.scrollLeft = from.scrollLeft;
+        syncing = false;
+      };
+    }
+    panels[0].addEventListener('scroll', makeSyncHandler(panels[0], panels[1]));
+    panels[1].addEventListener('scroll', makeSyncHandler(panels[1], panels[0]));
+  });
+
   // Deep linking: read hash on load, update on tab switch / section open
   function parseHash() {
     var hash = window.location.hash.replace('#', '');
