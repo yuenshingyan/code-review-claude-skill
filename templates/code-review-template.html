@@ -457,6 +457,42 @@ a.bc-path { text-decoration: none; }
 .cmd-palette-item .cpi-file { font-family: 'IBM Plex Mono', monospace; color: #e2e8f0; font-size: 12px; }
 .cmd-palette-item .cpi-tab { font-size: 9px; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
 .cmd-palette-item .cpi-desc { color: #4a5568; font-size: 11px; width: 100%; padding-left: 44px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Grouped palette: file group header */
+.cmd-palette-group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 12px; background: #12161d;
+  border-top: 1px solid #1e2430;
+}
+.cpi-group-filename {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px; font-weight: 600; color: #8892a4;
+  flex-shrink: 0; letter-spacing: -0.01em;
+}
+.cpi-group-dir {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; color: #4a5568;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.cpi-group-count {
+  font-size: 11px; font-weight: 500; color: #8892a4;
+  background: #12161d; border: 1px solid #1e2430;
+  border-radius: 3px; padding: 0 5px; flex-shrink: 0;
+}
+.cmd-palette-item.grouped { padding-left: 24px; align-items: center; flex-wrap: nowrap; }
+.cpi-tab-pill {
+  font-size: 10px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: 0.03em; border-radius: 3px; padding: 1px 5px;
+  min-width: 30px; text-align: center; flex-shrink: 0;
+}
+.cpi-desc-text {
+  font-size: 12px; color: #8892a4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.cmd-palette-more {
+  font-size: 11px; color: #4a5568;
+  padding: 2px 12px 7px 24px; cursor: pointer; user-select: none;
+}
+.cmd-palette-more:hover { color: #8892a4; }
 
 
 /* Related changes */
@@ -1473,6 +1509,15 @@ a.bc-path { text-decoration: none; }
   var paletteResults = document.getElementById('cmd-palette-results');
   var paletteItems = [];
   var paletteSelectedIdx = 0;
+  var paletteExpandedGroups = {};
+  var TAB_PILL_MAP = {
+    'security':    { abbr: 'Sec',  color: '#f87171', bg: 'rgba(248,113,113,0.12)' },
+    'bug_fixes':   { abbr: 'Bug',  color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
+    'bug fixes':   { abbr: 'Bug',  color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
+    'performance': { abbr: 'Perf', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' },
+    'refactors':   { abbr: 'Ref',  color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
+  };
+  function getTabPill(tab) { return TAB_PILL_MAP[tab.toLowerCase()] || null; }
 
   // Build palette items from all sections
   data.summary.forEach(function(s) {
@@ -1488,6 +1533,7 @@ a.bc-path { text-decoration: none; }
     paletteOverlay.classList.add('open');
     paletteInput.value = '';
     paletteSelectedIdx = 0;
+    paletteExpandedGroups = {};
     renderPaletteResults('');
     setTimeout(function() { paletteInput.focus(); }, 50);
   }
@@ -1501,23 +1547,63 @@ a.bc-path { text-decoration: none; }
       if (!q) return true;
       return item.file.toLowerCase().indexOf(q) !== -1 || item.desc.toLowerCase().indexOf(q) !== -1;
     });
-    paletteSelectedIdx = Math.min(paletteSelectedIdx, Math.max(0, filtered.length - 1));
+    var sectionItems = filtered.filter(function(i) { return i.type === 'section'; });
+    var tabItems = filtered.filter(function(i) { return i.type === 'tab'; });
+    var fileCounts = {};
+    sectionItems.forEach(function(i) { fileCounts[i.file] = (fileCounts[i.file] || 0) + 1; });
+    var sortedFiles = Object.keys(fileCounts).sort(function(a, b) { return fileCounts[b] - fileCounts[a]; });
+    var LIMIT = 4;
+    // Pass 1: collect all currently-visible items to compute count for clamping
+    var visibleItems = [];
+    sortedFiles.forEach(function(file) {
+      var items = sectionItems.filter(function(i) { return i.file === file; });
+      var shown = paletteExpandedGroups[file] ? items : items.slice(0, LIMIT);
+      shown.forEach(function(item) { visibleItems.push(item); });
+    });
+    tabItems.forEach(function(item) { visibleItems.push(item); });
+    paletteSelectedIdx = Math.min(paletteSelectedIdx, Math.max(0, visibleItems.length - 1));
+    // Pass 2: render HTML
     var html = '';
-    filtered.forEach(function(item, i) {
-      var cls = i === paletteSelectedIdx ? ' selected' : '';
-      if (item.type === 'tab') {
-        html += '<div class="cmd-palette-item' + cls + '" data-idx="' + i + '" data-action="tab" data-tab="' + esc(item.tab) + '">' +
-          '<span class="cpi-file">' + esc(item.file) + '</span></div>';
-      } else {
-        var tabLabel = toLabel(item.tab);
-        html += '<div class="cmd-palette-item' + cls + '" data-idx="' + i + '" data-action="section" data-id="' + esc(item.id) + '" data-tab="' + esc(item.tab) + '">' +
-          '<span class="cpi-tab">' + esc(tabLabel) + '</span>' +
-          '<span class="cpi-file">' + esc(item.file) + '</span>' +
-          '<span class="cpi-desc">' + esc(item.desc) + '</span></div>';
+    var itemIdx = 0;
+    sortedFiles.forEach(function(file) {
+      var items = sectionItems.filter(function(i) { return i.file === file; });
+      var parts = file.split('/');
+      var short = parts[parts.length - 1];
+      var dir = parts.slice(0, -1).join('/');
+      var count = items.length;
+      var isExp = !!paletteExpandedGroups[file];
+      var shown = isExp ? items : items.slice(0, LIMIT);
+      var extra = count - LIMIT;
+      html += '<div class="cmd-palette-group-header">' +
+        '<span class="cpi-group-filename">' + esc(short) + '</span>' +
+        '<span class="cpi-group-dir">' + esc(dir) + '/</span>' +
+        '<span class="cpi-group-count">\xd7' + count + '</span>' +
+        '</div>';
+      shown.forEach(function(item) {
+        var cls = itemIdx === paletteSelectedIdx ? ' selected' : '';
+        itemIdx++;
+        var pill = getTabPill(item.tab);
+        var pillHtml = pill
+          ? '<span class="cpi-tab-pill" style="color:' + pill.color + ';background:' + pill.bg + '">' + pill.abbr + '</span>'
+          : '<span class="cpi-tab-pill" style="color:#8892a4;background:rgba(136,146,164,0.12)">' + esc(toLabel(item.tab).slice(0, 4)) + '</span>';
+        html += '<div class="cmd-palette-item grouped' + cls + '" data-action="section" data-id="' + esc(item.id) + '" data-tab="' + esc(item.tab) + '" title="' + esc(item.desc) + '">' +
+          pillHtml +
+          '<span class="cpi-desc-text">' + esc(item.desc) + '</span>' +
+          '</div>';
+      });
+      if (extra > 0) {
+        html += '<div class="cmd-palette-more" data-file="' + esc(file) + '">' +
+          (isExp ? '↑ show less' : '+' + extra + ' more') +
+          '</div>';
       }
     });
+    tabItems.forEach(function(item) {
+      var cls = itemIdx === paletteSelectedIdx ? ' selected' : '';
+      itemIdx++;
+      html += '<div class="cmd-palette-item' + cls + '" data-action="tab" data-tab="' + esc(item.tab) + '">' +
+        '<span class="cpi-file">' + esc(item.file) + '</span></div>';
+    });
     paletteResults.innerHTML = html;
-    paletteResults._filtered = filtered;
   }
 
   function executePaletteItem(el) {
@@ -1559,6 +1645,13 @@ a.bc-path { text-decoration: none; }
     }
   });
   paletteResults.addEventListener('click', function(e) {
+    var more = e.target.closest('.cmd-palette-more');
+    if (more) {
+      var file = more.dataset.file;
+      paletteExpandedGroups[file] = !paletteExpandedGroups[file];
+      renderPaletteResults(paletteInput.value);
+      return;
+    }
     var item = e.target.closest('.cmd-palette-item');
     if (item) executePaletteItem(item);
   });
