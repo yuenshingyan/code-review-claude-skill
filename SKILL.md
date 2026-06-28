@@ -77,14 +77,21 @@ Use the values from `meta.json` directly for the top-level `scope`, `stats`, `co
 
 ### Tab classification
 
-| Tab | Content |
-|---|---|
-| `features` | New functionality, capabilities, UI, formats |
-| `fixes` | Bug fixes, crash fixes, data integrity |
-| `refactors` | Restructuring without behavior change |
-| `chores` | Deps, config, CI, docs, type cleanup, dead code |
+Choose tab keys that describe the logical groupings in this specific changeset. The keys you write in `sections` become the tab names in the UI — `"bug-fixes"` renders as "Bug Fixes", `"auth-refactor"` as "Auth Refactor". Use kebab-case for multi-word keys; use only `[a-z0-9-_]` characters.
 
-Omit any tab key with zero entries.
+Common starting points (not the only options):
+
+| Key | Use when |
+|---|---|
+| `features` | New capabilities, UI, APIs, data formats |
+| `bug-fixes` | Crash fixes, data integrity, behavioral corrections |
+| `refactors` | Restructuring without behavior change |
+| `chores` | Deps, config, CI, docs, type-only cleanup, dead code removal |
+| `security` | Auth, input validation, permission changes |
+| `performance` | Caching, query optimization, algorithmic improvements |
+| `migrations` | Schema changes, data migrations, breaking format changes |
+
+Aim for 2–5 tabs. Omit any tab key with zero entries.
 
 ### WHY / HOW / WHEN / WHERE annotations
 
