@@ -186,7 +186,7 @@ Always write `"code": []` — `build_review.py` populates code arrays by looking
 
 ### Content quality rules
 
-- **One section per logical change.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), emit one section per hunk — same `file` path, separate `desc`/`why`/`how`/`when`/`where`. The build script matches each section to a hunk by keyword scoring; grouping multiple hunks into one section prevents correct matching.
+- **One section per logical change.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), emit one section per hunk — same `file` path, separate `desc`/`why`/`how`/`when`/`where`. Grouping distant hunks into one section causes the build script to fill all source lines between them as context, producing a very long snippet that spans multiple unrelated functions. If two hunks in the same file are more than ~30 lines apart, they belong in separate sections — use the `related` field to link them if they are conceptually connected.
 - Key identifiers should cover types, functions, fields a newcomer needs defined. Skip trivial ones (`i`, `db`, `Ok`). Include `kind` (function, variable, interface, type, class, const, enum) and `type` (type signature) when available — these help reviewers understand what each identifier is at a glance.
 - `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - For deleted files: `after: null`.
