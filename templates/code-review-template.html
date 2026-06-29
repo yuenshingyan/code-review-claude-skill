@@ -1625,7 +1625,7 @@ a.bc-path { text-decoration: none; }
         html += '<div class="cmd-palette-item grouped' + cls + '" data-action="section" data-id="' + esc(item.id) + '" data-tab="' + esc(item.tab) + '" title="' + esc(item.desc) + '">' +
           pillHtml +
           '<span class="cpi-desc-text">' + esc(item.desc) + '</span>' +
-          getStatusIcon(localStorage.getItem('code-review:' + item.id + ':status') || 'none') +
+          getStatusIcon(localStorage.getItem('code-review:' + item.file + ':status') || 'none') +
           '</div>';
       });
       if (extra > 0) {
