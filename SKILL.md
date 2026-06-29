@@ -48,7 +48,8 @@ Run `gather_diff.py` with the mode chosen in Step 0:
 ```bash
 python3 ~/.claude/skills/code-review/scripts/gather_diff.py <mode> \
   --meta scratchpad/meta.json \
-  --diff scratchpad/raw.diff
+  --diff scratchpad/raw.diff \
+  --file-contents scratchpad/file-contents.json
 ```
 
 Where `<mode>` is `uncommitted`, `branch`, or a base ref string (e.g. `main`, `v1.2.0`).
@@ -56,6 +57,7 @@ Where `<mode>` is `uncommitted`, `branch`, or a base ref string (e.g. `main`, `v
 The script handles all git commands, skip-list filtering (lock files, vendored deps, generated code, binary files), stat extraction, and commit history automatically. It outputs:
 - `scratchpad/meta.json` — scope, stats, commits, skipped files, changed file list
 - `scratchpad/raw.diff` — filtered unified diff
+- `scratchpad/file-contents.json` — full before/after line content for each changed file
 
 ### Scale guidance
 
@@ -234,6 +236,7 @@ For `status: "renamed"` → add `"oldFile": "<original path>"`.
 ```bash
 python3 ~/.claude/skills/code-review/scripts/build_review.py \
   scratchpad/hunks.json \
+  scratchpad/file-contents.json \
   scratchpad/review.json \
   ~/.claude/skills/code-review/templates/code-review-template.html \
   code-review.html
