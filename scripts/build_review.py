@@ -133,6 +133,17 @@ def prepend_function_context(code, file_path):
                 result.extend(_signature_preamble(source, sig_start, first_line))
                 last_sig_start = sig_start
         result.extend(items)
+        # Track the enclosing function of the segment's last line so a
+        # signature that appears inside this segment isn't re-prepended
+        # in the next segment.
+        last_item_line = next(
+            (it['line'] for it in reversed(items) if isinstance(it.get('line'), int)),
+            None,
+        )
+        if last_item_line:
+            end_sig = find_enclosing_signature(source, last_item_line + 1)
+            if end_sig:
+                last_sig_start = end_sig
     return result
 
 
