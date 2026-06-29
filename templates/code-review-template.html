@@ -294,6 +294,16 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 .btn-jump-line:hover { color: #e2e8f0; border-color: #3a4150; }
 .line-ref { color: #4a5568; font-family: 'IBM Plex Mono', monospace; font-size: 11px; align-self: center; }
 
+/* Inline diff panels */
+.diff-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 12px 4px; }
+.diff-panel { overflow-x: auto; border: 1px solid #1e2430; border-radius: 4px; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+.diff-panel-header { padding: 4px 10px; font-size: 10px; color: #4a5568; background: #0a0d12; border-bottom: 1px solid #1e2430; letter-spacing: 0.5px; text-transform: uppercase; }
+.diff-line { padding: 1px 10px; white-space: pre; display: flex; gap: 10px; line-height: 1.5; }
+.diff-line-num { color: #2e3a4a; min-width: 32px; text-align: right; user-select: none; flex-shrink: 0; }
+.diff-line.removed { background: rgba(248, 113, 113, 0.1); }
+.diff-line.added { background: rgba(74, 222, 128, 0.08); }
+.diff-line-text { flex: 1; min-width: 0; }
+
 h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px 0 4px; }
 .why { color: #8892a4; font-style: italic; font-size: 12px; margin: 4px 0 12px; line-height: 1.55; }
 
@@ -588,10 +598,14 @@ a.bc-path { text-decoration: none; }
 <div class="toast" id="toast"></div>
 
 <script id="review-data" type="application/json">{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{}}</script>
+<script id="hunks-data" type="application/json">[]</script>
 
 <script>
 (function() {
   var data = JSON.parse(document.getElementById('review-data').textContent);
+  var rawHunks = JSON.parse(document.getElementById('hunks-data').textContent);
+  var hunksByFile = {};
+  rawHunks.forEach(function(entry) { hunksByFile[entry.file] = entry.hunks; });
   Object.keys(localStorage).forEach(function(k) {
     if (k.startsWith('code-review:')) localStorage.removeItem(k);
   });
@@ -786,6 +800,35 @@ a.bc-path { text-decoration: none; }
     return html;
   }
 
+  function buildDiffPanels(s) {
+    var fileHunks = hunksByFile[s.file];
+    if (!fileHunks || !fileHunks.length) return '';
+    var lineSet = {};
+    (s.lines || []).forEach(function(l) { lineSet[l] = true; });
+    var relevant = Object.keys(lineSet).length > 0
+      ? fileHunks.filter(function(h) { return lineSet[h.old_start] || lineSet[h.new_start]; })
+      : fileHunks;
+    if (!relevant.length) relevant = fileHunks;
+    var allBefore = [], allAfter = [];
+    relevant.forEach(function(h) {
+      if (h.before && h.before.length) allBefore = allBefore.concat(h.before);
+      if (h.after && h.after.length) allAfter = allAfter.concat(h.after);
+    });
+    if (!allBefore.length && !allAfter.length) return '';
+    function renderLines(lines) {
+      return lines.map(function(ln) {
+        return '<div class="diff-line ' + ln.type + '">' +
+          '<span class="diff-line-num">' + ln.line + '</span>' +
+          '<span class="diff-line-text">' + esc(ln.text) + '</span>' +
+          '</div>';
+      }).join('');
+    }
+    return '<div class="diff-panels">' +
+      '<div class="diff-panel"><div class="diff-panel-header">Before</div>' + renderLines(allBefore) + '</div>' +
+      '<div class="diff-panel"><div class="diff-panel-header">After</div>' + renderLines(allAfter) + '</div>' +
+      '</div>';
+  }
+
   // Build sections
   function buildSection(s) {
     var html = '<section class="change" id="' + esc(s.id) + '" data-search-file="' + esc(s.file).toLowerCase() + '" data-search-desc="' + esc(s.desc).toLowerCase() + '"><details><summary>';
@@ -855,11 +898,13 @@ a.bc-path { text-decoration: none; }
       html += '</div>';
     }
 
-    // Diff action buttons — open VSCode's native diff panel for this file
+    // Inline before/after diff panels
+    html += buildDiffPanels(s);
+
+    // Diff action buttons
     if (s.absPath) {
-      var uriEncoded = encodeURIComponent(JSON.stringify([{scheme: 'file', path: s.absPath}]));
       html += '<div class="diff-actions">';
-      html += '<a class="btn-open-diff" href="command:git.openChange?' + uriEncoded + '">' + ICON_DIFF + ' Open in Diff Editor</a>';
+      html += '<a class="btn-open-diff" href="vscode://file/' + esc(s.absPath) + (s.startLine ? ':' + s.startLine : '') + '">' + ICON_DIFF + ' Open in VSCode</a>';
       if (s.startLine) {
         html += '<button class="btn-jump-line" data-abs-path="' + esc(s.absPath) + '" data-line="' + s.startLine + '">Jump to line ' + s.startLine + '</button>';
         html += '<span class="line-ref">:' + s.startLine + '</span>';
