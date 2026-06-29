@@ -46,6 +46,8 @@ def get_source_lines(file_path):
 
 FUNC_SIG_PATTERNS = [
     re.compile(r'^\s*(pub(\s*\(.*?\))?\s+)?(async\s+)?fn\s+\w'),      # Rust fn
+    re.compile(r'^\s*(pub(\s*\(.*?\))?\s+)?(struct|enum|trait)\s+\w'), # Rust struct/enum/trait
+    re.compile(r'^\s*impl[\s<]'),                                       # Rust impl
     re.compile(r'^\s*(async\s+)?def\s+\w'),                             # Python def
     re.compile(r'^\s*(export\s+)?(default\s+)?(async\s+)?function\s+\w'),  # JS/TS
     re.compile(r'^\s*(public|private|protected|internal)\b.*\w\s*\('),  # Java/C#/Swift
