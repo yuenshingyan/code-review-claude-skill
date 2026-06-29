@@ -274,8 +274,10 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 
 /* Inline diff panels */
 .diff-panels { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin: 10px 12px 4px; align-items: stretch; }
-.diff-panel-wrap { display: flex; border: 1px solid #1e2430; border-radius: 4px; overflow: hidden; min-width: 0; }
-.diff-panel { overflow-x: auto; overflow-y: auto; max-height: 400px; flex: 1; min-width: 0; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+.diff-panel-wrap { display: flex; flex-direction: column; border: 1px solid #1e2430; border-radius: 4px; overflow: hidden; min-width: 0; max-height: 400px; }
+.diff-panel { overflow-x: auto; overflow-y: scroll; flex: 1; min-height: 0; min-width: 0; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+.diff-panel-spacer { position: relative; }
+.diff-panel-content { position: absolute; top: 0; left: 0; will-change: transform; }
 .diff-minimap { width: 36px; background: #0a0d12; border: 1px solid #1e2430; border-radius: 4px; display: flex; flex-direction: column; cursor: pointer; overflow: hidden; }
 .diff-minimap-header { padding: 4px 0; border-bottom: 1px solid #1e2430; flex-shrink: 0; }
 .diff-minimap-canvas { display: block; width: 100%; flex: 1; min-height: 0; }
@@ -802,15 +804,9 @@ a.bc-path { text-decoration: none; }
       (h.before || []).forEach(function(l) { if (l.type === 'removed') removedLines[l.line] = true; });
       (h.after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
     });
-    function renderLines(lines, changedSet, changedClass) {
-      return lines.map(function(text, i) {
-        var n = i + 1;
-        return '<div class="diff-line ' + (changedSet[n] ? changedClass : '') + '" data-line-num="' + n + '">' +
-          '<span class="diff-line-num">' + n + '</span>' +
-          '<span class="diff-line-text">' + esc(text) + '</span></div>';
-      }).join('');
-    }
     var sid = esc(s.id);
+    var beforeH = fileContent.before_lines.length * LINE_HEIGHT;
+    var afterH  = fileContent.after_lines.length  * LINE_HEIGHT;
     var mmData = JSON.stringify({
       r: Object.keys(removedLines).map(Number),
       a: Object.keys(addedLines).map(Number),
@@ -823,12 +819,16 @@ a.bc-path { text-decoration: none; }
       '</div>';
     return '<div class="diff-panels" data-section-id="' + sid + '" data-start-line="' + (s.startLine || 1) + '" data-file="' + esc(s.file) + '">' +
       '<div class="diff-panel-wrap">' +
-        '<div class="diff-panel" id="diff-before-' + sid + '"><div class="diff-panel-header">Before</div>' +
-        renderLines(fileContent.before_lines, removedLines, 'removed') + '</div>' +
+        '<div class="diff-panel-header">Before</div>' +
+        '<div class="diff-panel" id="diff-before-' + sid + '">' +
+          '<div class="diff-panel-spacer" style="height:' + beforeH + 'px"><div class="diff-panel-content"></div></div>' +
+        '</div>' +
       '</div>' +
       '<div class="diff-panel-wrap">' +
-        '<div class="diff-panel" id="diff-after-' + sid + '"><div class="diff-panel-header">After</div>' +
-        renderLines(fileContent.after_lines, addedLines, 'added') + '</div>' +
+        '<div class="diff-panel-header">After</div>' +
+        '<div class="diff-panel" id="diff-after-' + sid + '">' +
+          '<div class="diff-panel-spacer" style="height:' + afterH + 'px"><div class="diff-panel-content"></div></div>' +
+        '</div>' +
       '</div>' +
       minimap +
       '</div>';
@@ -1565,6 +1565,35 @@ a.bc-path { text-decoration: none; }
 
 
 
+  // Virtual scrolling
+  var LINE_HEIGHT = 20;
+  var OVERDRAW = 8;
+  var _panelData = {};
+
+  function renderVisibleLines(panelId) {
+    var panel = document.getElementById(panelId);
+    var data = _panelData[panelId];
+    if (!panel || !data) return;
+    var content = panel.querySelector('.diff-panel-content');
+    if (!content) return;
+    var scrollTop = panel.scrollTop;
+    var clientH = panel.clientHeight;
+    var total = data.lines.length;
+    var first = Math.max(0, Math.floor(scrollTop / LINE_HEIGHT) - OVERDRAW);
+    var last  = Math.min(total - 1, Math.ceil((scrollTop + clientH) / LINE_HEIGHT) + OVERDRAW);
+    content.style.transform = 'translateY(' + (first * LINE_HEIGHT) + 'px)';
+    var html = '';
+    for (var i = first; i <= last; i++) {
+      var n = i + 1;
+      var cls = data.changedSet[n] ? data.changedClass : '';
+      var text = data.hlLines ? (data.hlLines[i] || '') : esc(data.lines[i] || '');
+      html += '<div class="diff-line ' + cls + '" data-line-num="' + n + '">' +
+        '<span class="diff-line-num">' + n + '</span>' +
+        '<span class="diff-line-text">' + text + '</span></div>';
+    }
+    content.innerHTML = html;
+  }
+
   // Draw the shared minimap onto its canvas
   function drawMinimap(sectionId) {
     var minimap = document.getElementById('minimap-' + sectionId);
@@ -1614,10 +1643,11 @@ a.bc-path { text-decoration: none; }
   // Scroll both diff panels to a given line number
   function scrollPanelsToLine(sectionId, lineNum) {
     ['diff-before-', 'diff-after-'].forEach(function(prefix) {
-      var panel = document.getElementById(prefix + sectionId);
+      var pid = prefix + sectionId;
+      var panel = document.getElementById(pid);
       if (!panel) return;
-      var target = panel.querySelector('[data-line-num="' + lineNum + '"]');
-      if (target) panel.scrollTop = target.offsetTop - panel.offsetTop;
+      panel.scrollTop = Math.max(0, (lineNum - 1) * LINE_HEIGHT);
+      renderVisibleLines(pid);
     });
     drawMinimap(sectionId);
   }
@@ -1683,17 +1713,16 @@ a.bc-path { text-decoration: none; }
   }
 
   function applyHighlighting(panelId, lines, lang) {
-    var panel = document.getElementById(panelId);
-    if (!panel || !window.hljs) return;
+    if (!window.hljs) return;
     var highlighted;
     try {
       highlighted = hljs.highlight(lines.join('\n'), { language: lang, ignoreIllegals: true }).value;
     } catch(e) { return; }
-    var hlLines = splitHighlightedLines(highlighted);
-    var spans = panel.querySelectorAll('.diff-line-text');
-    spans.forEach(function(span, i) {
-      if (i < hlLines.length) span.innerHTML = hlLines[i];
-    });
+    var data = _panelData[panelId];
+    if (data) {
+      data.hlLines = splitHighlightedLines(highlighted);
+      renderVisibleLines(panelId);
+    }
   }
 
   function highlightPanels(container) {
@@ -1710,15 +1739,27 @@ a.bc-path { text-decoration: none; }
     applyHighlighting('diff-after-' + sid, fc.after_lines, lang);
   }
 
-  // Auto-scroll panels to startLine when a section is opened
+  // Initialize virtual panels and auto-scroll when a section is opened
   root.addEventListener('toggle', function(e) {
     if (!e.target.open) return;
-    var panels = e.target.querySelector('.diff-panels');
-    if (!panels) return;
-    var sid = panels.dataset.sectionId;
-    scrollPanelsToLine(sid, parseInt(panels.dataset.startLine, 10) || 1);
+    var container = e.target.querySelector('.diff-panels');
+    if (!container) return;
+    var sid  = container.dataset.sectionId;
+    var file = container.dataset.file;
+    var fc   = fileContentsByFile[file];
+    if (fc) {
+      var fileHunks = hunksByFile[file] || [];
+      var removedLines = {}, addedLines = {};
+      fileHunks.forEach(function(h) {
+        (h.before || []).forEach(function(l) { if (l.type === 'removed') removedLines[l.line] = true; });
+        (h.after  || []).forEach(function(l) { if (l.type === 'added')   addedLines[l.line]  = true; });
+      });
+      _panelData['diff-before-' + sid] = { lines: fc.before_lines, changedSet: removedLines, changedClass: 'removed', hlLines: null };
+      _panelData['diff-after-'  + sid] = { lines: fc.after_lines,  changedSet: addedLines,   changedClass: 'added',   hlLines: null };
+    }
+    scrollPanelsToLine(sid, parseInt(container.dataset.startLine, 10) || 1);
     drawMinimap(sid);
-    highlightPanels(panels);
+    highlightPanels(container);
   }, true);
 
   // Jump button in section header
@@ -1761,7 +1802,7 @@ a.bc-path { text-decoration: none; }
       }
     });
     _syncLock = false;
-    // Defer layout reads to next frame to avoid forced reflow on every scroll tick
+    siblings.forEach(function(p) { renderVisibleLines(p.id); });
     var sid = container.dataset.sectionId;
     cancelAnimationFrame(_minimapRaf);
     _minimapRaf = requestAnimationFrame(function() { drawMinimap(sid); });
