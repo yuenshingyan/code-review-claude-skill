@@ -278,13 +278,7 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 .diff-panel { overflow-x: auto; overflow-y: auto; max-height: 400px; flex: 1; min-width: 0; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
 .diff-minimap { width: 36px; background: #0a0d12; border: 1px solid #1e2430; border-radius: 4px; display: flex; flex-direction: column; cursor: pointer; overflow: hidden; }
 .diff-minimap-header { padding: 4px 0; border-bottom: 1px solid #1e2430; flex-shrink: 0; }
-.diff-minimap-body { flex: 1; position: relative; overflow: hidden; }
-.diff-minimap-before { position: absolute; top: 0; left: 0; width: 50%; bottom: 0; }
-.diff-minimap-after { position: absolute; top: 0; right: 0; width: 50%; bottom: 0; }
-.diff-minimap-tick { position: absolute; left: 2px; right: 2px; height: 2px; border-radius: 1px; }
-.diff-minimap-tick.removed { background: rgba(248, 113, 113, 0.85); }
-.diff-minimap-tick.added { background: rgba(74, 222, 128, 0.75); }
-.diff-minimap-viewport { position: absolute; left: 0; right: 0; background: rgba(255,255,255,0.06); border-top: 1px solid rgba(255,255,255,0.1); border-bottom: 1px solid rgba(255,255,255,0.1); pointer-events: none; min-height: 8px; display: none; }
+.diff-minimap-canvas { display: block; width: 100%; flex: 1; min-height: 0; }
 /* prevent hljs theme from overriding panel backgrounds */
 .diff-panel pre code.hljs, .diff-panel code.hljs, .diff-line-text { background: transparent !important; padding: 0 !important; }
 .btn-jump-start {
@@ -816,24 +810,16 @@ a.bc-path { text-decoration: none; }
           '<span class="diff-line-text">' + esc(text) + '</span></div>';
       }).join('');
     }
-    function buildTicks(total, changedSet, changedClass) {
-      var ticks = '';
-      for (var n = 1; n <= total; n++) {
-        if (changedSet[n]) {
-          var pct = total > 1 ? ((n - 1) / (total - 1) * 100).toFixed(2) : '0';
-          ticks += '<div class="diff-minimap-tick ' + changedClass + '" style="top:' + pct + '%"></div>';
-        }
-      }
-      return ticks;
-    }
     var sid = esc(s.id);
+    var mmData = JSON.stringify({
+      r: Object.keys(removedLines).map(Number),
+      a: Object.keys(addedLines).map(Number),
+      bt: fileContent.before_lines.length,
+      at: fileContent.after_lines.length
+    });
     var minimap = '<div class="diff-minimap" id="minimap-' + sid + '" data-section-id="' + sid + '">' +
       '<div class="diff-minimap-header"></div>' +
-      '<div class="diff-minimap-body">' +
-        '<div class="diff-minimap-before">' + buildTicks(fileContent.before_lines.length, removedLines, 'removed') + '</div>' +
-        '<div class="diff-minimap-after">' + buildTicks(fileContent.after_lines.length, addedLines, 'added') + '</div>' +
-        '<div class="diff-minimap-viewport"></div>' +
-      '</div>' +
+      '<canvas class="diff-minimap-canvas" data-minimap=\'' + mmData.replace(/'/g, '&#39;') + '\'></canvas>' +
       '</div>';
     return '<div class="diff-panels" data-section-id="' + sid + '" data-start-line="' + (s.startLine || 1) + '" data-file="' + esc(s.file) + '">' +
       '<div class="diff-panel-wrap">' +
@@ -1579,25 +1565,50 @@ a.bc-path { text-decoration: none; }
 
 
 
-  // Update the shared minimap viewport indicator
-  function updateMinimap(sectionId) {
+  // Draw the shared minimap onto its canvas
+  function drawMinimap(sectionId) {
     var minimap = document.getElementById('minimap-' + sectionId);
     if (!minimap) return;
+    var canvas = minimap.querySelector('.diff-minimap-canvas');
+    if (!canvas) return;
+    var W = canvas.offsetWidth, H = canvas.offsetHeight;
+    if (W === 0 || H === 0) return;
+    var dpr = window.devicePixelRatio || 1;
+    var pw = Math.round(W * dpr), ph = Math.round(H * dpr);
+    if (canvas.width !== pw || canvas.height !== ph) {
+      canvas.width = pw;
+      canvas.height = ph;
+    }
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var data = JSON.parse(canvas.dataset.minimap);
+    // Background
+    ctx.fillStyle = '#0a0d12';
+    ctx.fillRect(0, 0, W, H);
+    // Removed ticks — left half
+    var half = W / 2;
+    ctx.fillStyle = 'rgba(248,113,113,0.85)';
+    data.r.forEach(function(n) {
+      var y = data.bt > 1 ? (n - 1) / (data.bt - 1) * H : 0;
+      ctx.fillRect(2, y, half - 3, 2);
+    });
+    // Added ticks — right half
+    ctx.fillStyle = 'rgba(74,222,128,0.75)';
+    data.a.forEach(function(n) {
+      var y = data.at > 1 ? (n - 1) / (data.at - 1) * H : 0;
+      ctx.fillRect(half + 1, y, half - 3, 2);
+    });
+    // Viewport indicator
     var panel = document.getElementById('diff-before-' + sectionId);
-    if (!panel) return;
-    var body = minimap.querySelector('.diff-minimap-body');
-    var vp = minimap.querySelector('.diff-minimap-viewport');
-    if (!body || !vp) return;
-    var bodyH = body.offsetHeight;
-    if (bodyH === 0) return;
-    var contentH = panel.scrollHeight;
-    var clientH = panel.clientHeight;
-    if (contentH <= clientH) { vp.style.display = 'none'; return; }
-    var vpH = Math.max(8, (clientH / contentH) * bodyH);
-    var vpTop = (panel.scrollTop / (contentH - clientH)) * (bodyH - vpH);
-    vp.style.display = '';
-    vp.style.height = vpH + 'px';
-    vp.style.top = vpTop + 'px';
+    if (panel && panel.scrollHeight > panel.clientHeight) {
+      var vpH = Math.max(8, (panel.clientHeight / panel.scrollHeight) * H);
+      var vpTop = (panel.scrollTop / (panel.scrollHeight - panel.clientHeight)) * (H - vpH);
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.fillRect(0, vpTop, W, vpH);
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0.5, vpTop + 0.5, W - 1, vpH - 1);
+    }
   }
 
   // Scroll both diff panels to a given line number
@@ -1608,7 +1619,7 @@ a.bc-path { text-decoration: none; }
       var target = panel.querySelector('[data-line-num="' + lineNum + '"]');
       if (target) panel.scrollTop = target.offsetTop - panel.offsetTop;
     });
-    updateMinimap(sectionId);
+    drawMinimap(sectionId);
   }
 
   // Syntax highlighting
@@ -1706,7 +1717,7 @@ a.bc-path { text-decoration: none; }
     if (!panels) return;
     var sid = panels.dataset.sectionId;
     scrollPanelsToLine(sid, parseInt(panels.dataset.startLine, 10) || 1);
-    updateMinimap(sid);
+    drawMinimap(sid);
     highlightPanels(panels);
   }, true);
 
@@ -1720,12 +1731,12 @@ a.bc-path { text-decoration: none; }
 
   // Minimap click — jump both panels to clicked position
   root.addEventListener('click', function(e) {
-    var body = e.target.closest('.diff-minimap-body');
-    if (!body) return;
-    var minimap = body.closest('.diff-minimap');
+    var canvas = e.target.closest('.diff-minimap-canvas');
+    if (!canvas) return;
+    var minimap = canvas.closest('.diff-minimap');
     if (!minimap) return;
     var sid = minimap.dataset.sectionId;
-    var rect = body.getBoundingClientRect();
+    var rect = canvas.getBoundingClientRect();
     var frac = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
     ['diff-before-', 'diff-after-'].forEach(function(prefix) {
       var p = document.getElementById(prefix + sid);
@@ -1733,8 +1744,9 @@ a.bc-path { text-decoration: none; }
     });
   });
 
-  // Sync scroll between before/after panels + update minimaps
+  // Sync scroll between before/after panels + update minimap
   var _syncLock = false;
+  var _minimapRaf = null;
   root.addEventListener('scroll', function(e) {
     var panel = e.target.closest ? e.target.closest('.diff-panel') : null;
     if (!panel || _syncLock) return;
@@ -1749,7 +1761,10 @@ a.bc-path { text-decoration: none; }
       }
     });
     _syncLock = false;
-    updateMinimap(container.dataset.sectionId);
+    // Defer layout reads to next frame to avoid forced reflow on every scroll tick
+    var sid = container.dataset.sectionId;
+    cancelAnimationFrame(_minimapRaf);
+    _minimapRaf = requestAnimationFrame(function() { drawMinimap(sid); });
   }, true);
 
   // Review checklist persistence
