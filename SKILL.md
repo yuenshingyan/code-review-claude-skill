@@ -280,14 +280,19 @@ For `status: "renamed"` → add `"oldFile": "<original path>"`.
 ## Step 4 — Build the review
 
 ```bash
+python3 ~/.claude/skills/code-review/scripts/extract_scopes.py \
+  scratchpad/hunks.json \
+  scratchpad/scopes.json
+
 python3 ~/.claude/skills/code-review/scripts/build_review.py \
   scratchpad/hunks.json \
   scratchpad/review.json \
   ~/.claude/skills/code-review/templates/code-review-template.html \
-  code-review.html
+  code-review.html \
+  scratchpad/scopes.json
 ```
 
-The script assigns hunks to sections, validates, and produces the HTML. If it exits 1, read the output to identify the issue:
+The first script extracts scope-aware code blocks (full function/struct/enum/impl/trait bodies) from the parsed hunks. The second script assigns them to review sections, validates, and produces the HTML. If it exits 1, read the output to identify the issue:
 
 - **NO LINES** — the section's `lines` array is missing or empty. Open `scratchpad/hunks.json`, find the entry for this file, and add the correct `old_start` (or `new_start` for new files) integers to the `lines` array.
 - **Gap violation** (`GAP: file (before): 73 → 130`) — the section references a hunk that spans two separate changes. Split the section into two entries and give each its own `lines` entry pointing to the correct hunk.
