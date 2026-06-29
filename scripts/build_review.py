@@ -194,29 +194,34 @@ def _scope_blocks_to_code(blocks):
     return merged
 
 
-def _match_scope_blocks(scope_entry, section):
+def _match_scope_blocks(scope_entry, section, hunk_index):
     """Match scope blocks to a section based on line overlap with hunks.
 
     When multiple sections share the same file, each section's 'lines' array
     (if present) determines which scope blocks it gets. If no 'lines' are
     specified, all blocks for the file are returned.
+
+    hunk_index maps old_start -> hunk dict (with new_start) so we can
+    translate before-side line numbers to after-side coordinates.
     """
     line_numbers = section.get('lines', [])
     if not line_numbers:
-        # No lines specified — return all blocks
         return scope_entry.get('before_blocks', []), scope_entry.get('after_blocks', [])
 
-    line_set = set(line_numbers)
+    before_line_set = set(line_numbers)
+    after_line_set = set()
+    for ln in line_numbers:
+        hunk = hunk_index.get(ln)
+        if hunk:
+            after_line_set.add(hunk['new_start'])
 
-    def blocks_overlapping(blocks):
+    def blocks_overlapping(blocks, line_set):
         matched = []
         for block in blocks:
-            # Check if any of the section's line numbers fall within this scope
             for ln in line_set:
                 if block['scope_start'] <= ln <= block['scope_end']:
                     matched.append(block)
                     break
-            # Also check if any changed line in the block matches
             if block not in matched:
                 changed_in_block = {
                     item['line'] for item in block['code']
@@ -226,8 +231,8 @@ def _match_scope_blocks(scope_entry, section):
                     matched.append(block)
         return matched
 
-    before = blocks_overlapping(scope_entry.get('before_blocks', []))
-    after = blocks_overlapping(scope_entry.get('after_blocks', []))
+    before = blocks_overlapping(scope_entry.get('before_blocks', []), before_line_set)
+    after = blocks_overlapping(scope_entry.get('after_blocks', []), after_line_set)
     return before, after
 
 
@@ -307,7 +312,8 @@ def rebuild_with_scopes(review, parsed, scopes):
             if not section.get('lines'):
                 continue
 
-            before_blocks, after_blocks = _match_scope_blocks(scope_entry, section)
+            before_blocks, after_blocks = _match_scope_blocks(
+                scope_entry, section, file_hunks.get(file_path, {}))
             if file_path not in file_claimed_before:
                 file_claimed_before[file_path] = set()
                 file_claimed_after[file_path] = set()
