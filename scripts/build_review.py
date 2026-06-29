@@ -70,9 +70,10 @@ def validate(review):
 
 
 DEFAULT_PLACEHOLDER = '{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{}}'
+HUNKS_PLACEHOLDER = '<script id="hunks-data" type="application/json">[]</script>'
 
 
-def inject(review, template_path, output_path):
+def inject(review, parsed, template_path, output_path):
     with open(template_path, encoding='utf-8') as f:
         template = f.read()
 
@@ -84,6 +85,9 @@ def inject(review, template_path, output_path):
     if json_str not in result:
         print("ERROR: template injection failed — placeholder not found")
         return False
+
+    hunks_str = json.dumps(parsed, ensure_ascii=False)
+    result = result.replace(HUNKS_PLACEHOLDER, f'<script id="hunks-data" type="application/json">{hunks_str}</script>')
 
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(result)
@@ -113,7 +117,7 @@ if __name__ == '__main__':
         print("\nFix missing paths before injecting.")
         sys.exit(1)
 
-    if not inject(review, template_path, output_path):
+    if not inject(review, parsed, template_path, output_path):
         sys.exit(1)
 
     with open(review_path, 'w') as f:
