@@ -269,30 +269,6 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
   border-radius: 3px; padding: 8px 12px; margin: 4px 12px 12px;
 }
 
-/* Diff action buttons */
-.diff-actions {
-  display: flex; align-items: center; gap: 8px;
-  margin: 10px 0 12px; padding: 0 12px;
-}
-.btn-open-diff {
-  background: rgba(74, 158, 255, 0.1); border: 1px solid rgba(74, 158, 255, 0.3);
-  border-radius: 3px; color: #4a9eff;
-  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
-  padding: 5px 12px; cursor: pointer; text-decoration: none;
-  transition: background 100ms ease-out, border-color 100ms ease-out;
-  display: inline-flex; align-items: center; gap: 6px;
-}
-.btn-open-diff:hover {
-  background: rgba(74, 158, 255, 0.2); border-color: rgba(74, 158, 255, 0.5);
-}
-.btn-jump-line {
-  background: none; border: 1px solid #1e2430; border-radius: 3px;
-  color: #8892a4; font-family: 'IBM Plex Mono', monospace; font-size: 11px;
-  padding: 5px 10px; cursor: pointer;
-  transition: color 100ms ease-out, border-color 100ms ease-out;
-}
-.btn-jump-line:hover { color: #e2e8f0; border-color: #3a4150; }
-.line-ref { color: #4a5568; font-family: 'IBM Plex Mono', monospace; font-size: 11px; align-self: center; }
 
 /* Inline diff panels */
 .diff-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 12px 4px; }
@@ -653,8 +629,6 @@ a.bc-path { text-decoration: none; }
   var ICON_PENCIL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
   var ICON_COPY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   var ICON_FILE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
-  var ICON_DIFF = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
-
   function esc(s) {
     var d = document.createElement('div');
     d.textContent = s;
@@ -901,16 +875,6 @@ a.bc-path { text-decoration: none; }
     // Inline before/after diff panels
     html += buildDiffPanels(s);
 
-    // Diff action buttons
-    if (s.absPath) {
-      html += '<div class="diff-actions">';
-      html += '<a class="btn-open-diff" href="vscode://file/' + esc(s.absPath) + (s.startLine ? ':' + s.startLine : '') + '">' + ICON_DIFF + ' Open in VSCode</a>';
-      if (s.startLine) {
-        html += '<button class="btn-jump-line" data-abs-path="' + esc(s.absPath) + '" data-line="' + s.startLine + '">Jump to line ' + s.startLine + '</button>';
-        html += '<span class="line-ref">:' + s.startLine + '</span>';
-      }
-      html += '</div>';
-    }
 
     if (s.note) {
       html += '<p class="note">' + s.note + '</p>';
@@ -1581,15 +1545,6 @@ a.bc-path { text-decoration: none; }
     });
   });
 
-  // "Jump to line" button — re-opens file at the starting line of the change
-  root.addEventListener('click', function(e) {
-    var btn = e.target.closest('.btn-jump-line');
-    if (!btn) return;
-    e.stopPropagation();
-    var path = btn.dataset.absPath;
-    var line = btn.dataset.line || '1';
-    window.location.href = 'vscode://file/' + path + ':' + line;
-  });
 
   // Deep linking: read hash on load, update on tab switch / section open
   function parseHash() {
