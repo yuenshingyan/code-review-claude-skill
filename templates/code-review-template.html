@@ -478,7 +478,7 @@ a.bc-path { text-decoration: none; }
   background: #12161d; border: 1px solid #1e2430;
   border-radius: 3px; padding: 0 5px; flex-shrink: 0;
 }
-.cmd-palette-item.grouped { padding-left: 24px; align-items: center; flex-wrap: nowrap; }
+.cmd-palette-item.grouped { padding: 4px 12px 4px 24px; align-items: center; flex-wrap: nowrap; }
 .cpi-tab-pill {
   font-size: 10px; font-weight: 500; text-transform: uppercase;
   letter-spacing: 0.03em; border-radius: 3px; padding: 1px 5px;
@@ -493,6 +493,10 @@ a.bc-path { text-decoration: none; }
   padding: 2px 12px 7px 24px; cursor: pointer; user-select: none;
 }
 .cmd-palette-more:hover { color: #8892a4; }
+.cpi-status-icon {
+  width: 16px; height: 16px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
 
 
 /* Related changes */
@@ -1518,6 +1522,38 @@ a.bc-path { text-decoration: none; }
     'refactors':   { abbr: 'Ref',  color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
   };
   function getTabPill(tab) { return TAB_PILL_MAP[tab.toLowerCase()] || null; }
+  function getStatusIcon(status) {
+    if (status === 'approved') status = 'tick';
+    else if (status === 'rejected') status = 'cross';
+    else if (status === 'concern') status = 'warning';
+    if (status === 'tick') {
+      return '<span class="cpi-status-icon" title="Resolved">' +
+        '<svg width="13" height="13" viewBox="0 0 13 13" fill="none">' +
+        '<circle cx="6.5" cy="6.5" r="5.5" stroke="#98c379" stroke-width="1.3"/>' +
+        '<polyline points="3.8,6.5 5.6,8.3 9.2,4.7" stroke="#98c379" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '</svg></span>';
+    }
+    if (status === 'cross') {
+      return '<span class="cpi-status-icon" title="Failed">' +
+        '<svg width="13" height="13" viewBox="0 0 13 13" fill="none">' +
+        '<circle cx="6.5" cy="6.5" r="5.5" stroke="#e06c75" stroke-width="1.3"/>' +
+        '<line x1="4.2" y1="4.2" x2="8.8" y2="8.8" stroke="#e06c75" stroke-width="1.4" stroke-linecap="round"/>' +
+        '<line x1="8.8" y1="4.2" x2="4.2" y2="8.8" stroke="#e06c75" stroke-width="1.4" stroke-linecap="round"/>' +
+        '</svg></span>';
+    }
+    if (status === 'warning') {
+      return '<span class="cpi-status-icon" title="Needs review">' +
+        '<svg width="13" height="13" viewBox="0 0 13 13" fill="none">' +
+        '<path d="M6.5 1.5 L12 11.5 H1 Z" stroke="#e5c07b" stroke-width="1.3" stroke-linejoin="round" fill="none"/>' +
+        '<line x1="6.5" y1="5" x2="6.5" y2="8" stroke="#e5c07b" stroke-width="1.4" stroke-linecap="round"/>' +
+        '<circle cx="6.5" cy="9.5" r="0.65" fill="#e5c07b"/>' +
+        '</svg></span>';
+    }
+    return '<span class="cpi-status-icon" style="opacity:0.18">' +
+      '<svg width="13" height="13" viewBox="0 0 13 13" fill="none">' +
+      '<circle cx="6.5" cy="6.5" r="2" fill="#4b5263"/>' +
+      '</svg></span>';
+  }
 
   // Build palette items from all sections
   data.summary.forEach(function(s) {
@@ -1589,6 +1625,7 @@ a.bc-path { text-decoration: none; }
         html += '<div class="cmd-palette-item grouped' + cls + '" data-action="section" data-id="' + esc(item.id) + '" data-tab="' + esc(item.tab) + '" title="' + esc(item.desc) + '">' +
           pillHtml +
           '<span class="cpi-desc-text">' + esc(item.desc) + '</span>' +
+          getStatusIcon(localStorage.getItem('code-review:' + item.id + ':status') || 'none') +
           '</div>';
       });
       if (extra > 0) {
