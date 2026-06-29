@@ -201,8 +201,12 @@ def _match_scope_blocks(scope_entry, section, hunk_index):
     (if present) determines which scope blocks it gets. If no 'lines' are
     specified, all blocks for the file are returned.
 
-    hunk_index maps old_start -> hunk dict (with new_start) so we can
-    translate before-side line numbers to after-side coordinates.
+    Matching strategy:
+    1. Match before_blocks using old_start line numbers (reliable, same coordinate system).
+    2. Match after_blocks using translated new_start line numbers.
+    3. Fallback: if before matched blocks but after didn't, find after blocks
+       with matching scope names — handles cases where line offsets shifted
+       too much for coordinate-based matching.
     """
     line_numbers = section.get('lines', [])
     if not line_numbers:
@@ -233,6 +237,27 @@ def _match_scope_blocks(scope_entry, section, hunk_index):
 
     before = blocks_overlapping(scope_entry.get('before_blocks', []), before_line_set)
     after = blocks_overlapping(scope_entry.get('after_blocks', []), after_line_set)
+
+    before_names = {(b['scope_name'], b['scope_kind']) for b in before}
+    after_names = {(b['scope_name'], b['scope_kind']) for b in after}
+    missing = before_names - after_names
+    if missing:
+        before_pos = {}
+        for b in before:
+            key = (b['scope_name'], b['scope_kind'])
+            if key in missing:
+                before_pos[key] = b['scope_start']
+
+        all_after = scope_entry.get('after_blocks', [])
+        for name_kind in missing:
+            candidates = [b for b in all_after if (b['scope_name'], b['scope_kind']) == name_kind]
+            if len(candidates) == 1:
+                after.append(candidates[0])
+            elif candidates and name_kind in before_pos:
+                ref = before_pos[name_kind]
+                after.append(min(candidates, key=lambda b: abs(b['scope_start'] - ref)))
+        after.sort(key=lambda b: b['scope_start'])
+
     return before, after
 
 
