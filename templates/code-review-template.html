@@ -597,7 +597,7 @@ a.bc-path { text-decoration: none; }
 <script>
 (function() {
   var LINE_HEIGHT = 20;
-  var OVERDRAW = 8;
+  var OVERDRAW = 20;
   var _panelData = {};
 
   var data = JSON.parse(document.getElementById('review-data').textContent);
@@ -1581,6 +1581,10 @@ a.bc-path { text-decoration: none; }
     var total = data.lines.length;
     var first = Math.max(0, Math.floor(scrollTop / LINE_HEIGHT) - OVERDRAW);
     var last  = Math.min(total - 1, Math.ceil((scrollTop + clientH) / LINE_HEIGHT) + OVERDRAW);
+    // Skip rebuild if the rendered window hasn't changed
+    if (content._first === first && content._last === last) return;
+    content._first = first;
+    content._last = last;
     content.style.transform = 'translateY(' + (first * LINE_HEIGHT) + 'px)';
     var html = '';
     for (var i = first; i <= last; i++) {
@@ -1721,6 +1725,10 @@ a.bc-path { text-decoration: none; }
     var data = _panelData[panelId];
     if (data) {
       data.hlLines = splitHighlightedLines(highlighted);
+      // Invalidate range cache so the next renderVisibleLines always repaints with highlighted HTML
+      var panel = document.getElementById(panelId);
+      var content = panel && panel.querySelector('.diff-panel-content');
+      if (content) { content._first = -1; }
       renderVisibleLines(panelId);
     }
   }
@@ -1787,26 +1795,31 @@ a.bc-path { text-decoration: none; }
 
   // Sync scroll between before/after panels + update minimap
   var _syncLock = false;
-  var _minimapRaf = null;
-  root.addEventListener('scroll', function(e) {
-    var panel = e.target.closest ? e.target.closest('.diff-panel') : null;
-    if (!panel || _syncLock) return;
+  var _scrollRaf = null;
+  var _scrollPanel = null;
+  function flushScroll() {
+    _scrollRaf = null;
+    var panel = _scrollPanel;
+    _scrollPanel = null;
+    if (!panel) return;
     var container = panel.closest('.diff-panels');
     if (!container) return;
     var siblings = container.querySelectorAll('.diff-panel');
     _syncLock = true;
     siblings.forEach(function(p) {
-      if (p !== panel) {
-        p.scrollTop = panel.scrollTop;
-        p.scrollLeft = panel.scrollLeft;
-      }
+      if (p !== panel) { p.scrollTop = panel.scrollTop; p.scrollLeft = panel.scrollLeft; }
     });
     _syncLock = false;
     siblings.forEach(function(p) { renderVisibleLines(p.id); });
-    var sid = container.dataset.sectionId;
-    cancelAnimationFrame(_minimapRaf);
-    _minimapRaf = requestAnimationFrame(function() { drawMinimap(sid); });
-  }, true);
+    drawMinimap(container.dataset.sectionId);
+  }
+  root.addEventListener('scroll', function(e) {
+    var panel = e.target.closest ? e.target.closest('.diff-panel') : null;
+    if (!panel || _syncLock) return;
+    _scrollPanel = panel;
+    cancelAnimationFrame(_scrollRaf);
+    _scrollRaf = requestAnimationFrame(flushScroll);
+  }, { capture: true, passive: true });
 
   // Review checklist persistence
   root.querySelectorAll('.review-checklist input').forEach(function(cb) {
