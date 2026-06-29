@@ -98,8 +98,9 @@ def _signature_preamble(source, sig_start, first_line):
 
 def prepend_function_context(code, file_path):
     """Prepend the enclosing function signature before each code segment.
-    Segments are runs of non-separator lines split by '...' markers, so
-    each function in a multi-hunk section gets its own signature header."""
+    Segments are runs of non-separator lines split by '...' markers. When
+    consecutive segments share the same enclosing function, the signature is
+    only prepended before the first such segment."""
     if not code or not file_path:
         return code
     source = get_source_lines(file_path)
@@ -118,6 +119,7 @@ def prepend_function_context(code, file_path):
     segments.append(('code', current))
 
     result = []
+    last_sig_start = None
     for kind, items in segments:
         if kind == 'sep' or not items:
             result.extend(items)
@@ -125,8 +127,9 @@ def prepend_function_context(code, file_path):
         first_line = next((it['line'] for it in items if isinstance(it.get('line'), int)), None)
         if first_line and first_line > 1:
             sig_start = find_enclosing_signature(source, first_line)
-            if sig_start and sig_start < first_line:
+            if sig_start and sig_start < first_line and sig_start != last_sig_start:
                 result.extend(_signature_preamble(source, sig_start, first_line))
+                last_sig_start = sig_start
         result.extend(items)
     return result
 
