@@ -1568,6 +1568,24 @@ a.bc-path { text-decoration: none; }
     scrollPanelsToLine(btn.dataset.sectionId, parseInt(btn.dataset.startLine, 10) || 1);
   });
 
+  // Sync scroll between before/after panels
+  var _syncLock = false;
+  root.addEventListener('scroll', function(e) {
+    var panel = e.target.closest ? e.target.closest('.diff-panel') : null;
+    if (!panel || _syncLock) return;
+    var container = panel.closest('.diff-panels');
+    if (!container) return;
+    var siblings = container.querySelectorAll('.diff-panel');
+    _syncLock = true;
+    siblings.forEach(function(p) {
+      if (p !== panel) {
+        p.scrollTop = panel.scrollTop;
+        p.scrollLeft = panel.scrollLeft;
+      }
+    });
+    _syncLock = false;
+  }, true);
+
   // Review checklist persistence
   root.querySelectorAll('.review-checklist input').forEach(function(cb) {
     var key = 'code-review:' + cb.dataset.file + ':chk:' + cb.dataset.chk;
