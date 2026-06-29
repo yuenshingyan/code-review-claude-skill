@@ -284,12 +284,11 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 /* prevent hljs theme from overriding panel backgrounds */
 .diff-panel pre code.hljs, .diff-panel code.hljs, .diff-line-text { background: transparent !important; padding: 0 !important; }
 .btn-jump-start {
-  background: none; border: 1px solid #1e2430; border-radius: 3px;
-  color: #8892a4; font-family: 'IBM Plex Mono', monospace; font-size: 10px;
-  padding: 3px 8px; cursor: pointer; flex-shrink: 0;
-  transition: color 100ms ease-out, border-color 100ms ease-out;
+  background: none; border: none; color: #4a5568; cursor: pointer;
+  padding: 2px; border-radius: 3px; line-height: 1; flex-shrink: 0;
+  transition: color 100ms ease-out, background 100ms ease-out;
 }
-.btn-jump-start:hover { color: #e2e8f0; border-color: #3a4150; }
+.btn-jump-start:hover { color: #e2e8f0; background: rgba(255,255,255,0.08); }
 .diff-panel-header { padding: 4px 10px; font-size: 10px; color: #4a5568; background: #0a0d12; border-bottom: 1px solid #1e2430; letter-spacing: 0.5px; text-transform: uppercase; }
 .diff-line { padding: 1px 10px; white-space: pre; display: flex; gap: 10px; line-height: 1.5; }
 .diff-line-num { color: #2e3a4a; min-width: 32px; text-align: right; user-select: none; flex-shrink: 0; }
@@ -867,7 +866,7 @@ a.bc-path { text-decoration: none; }
     html += '</span>';
 
     if (s.startLine) {
-      html += '<button class="btn-jump-start" data-section-id="' + esc(s.id) + '" data-start-line="' + s.startLine + '" title="Jump to line ' + s.startLine + '">&#8593; ' + s.startLine + '</button>';
+      html += '<button class="btn-jump-start" data-section-id="' + esc(s.id) + '" data-start-line="' + s.startLine + '" title="Jump to line ' + s.startLine + '">&#8593;</button>';
     }
     html += '<button class="copy-path-btn" data-file-path="' + esc(s.file) + '" title="Copy file path">' + ICON_FILE + '</button>' +
       '<button class="copy-section-btn" data-section-id="' + esc(s.id) + '" title="Copy section as context">' + ICON_COPY + '</button>' +
