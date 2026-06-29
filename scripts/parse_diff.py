@@ -28,7 +28,7 @@ def parse_diff(lines):
         # New file diff
         if line.startswith('diff --git '):
             if current_file and current_hunk:
-                current_file['hunks'].append(finalize_hunk(current_hunk))
+                current_file['hunks'].append(current_hunk)
             if current_file:
                 files.append(current_file)
             parts = line.split(' b/', 1)
@@ -72,7 +72,7 @@ def parse_diff(lines):
         m = HUNK_HEADER.match(line)
         if m:
             if current_hunk:
-                current_file['hunks'].append(finalize_hunk(current_hunk))
+                current_file['hunks'].append(current_hunk)
             old_line = int(m.group(1))
             new_line = int(m.group(3))
             function_context = m.group(5).strip() if m.group(5) else ''
@@ -128,40 +128,10 @@ def parse_diff(lines):
     # Flush last file/hunk
     if current_file:
         if current_hunk:
-            current_file['hunks'].append(finalize_hunk(current_hunk))
+            current_file['hunks'].append(current_hunk)
         files.append(current_file)
 
     return files
-
-
-def finalize_hunk(hunk):
-    """Trim leading/trailing context to max 3 lines for readability."""
-    hunk['before'] = trim_context(hunk['before'])
-    hunk['after'] = trim_context(hunk['after'])
-    return hunk
-
-
-def trim_context(lines, max_context=3):
-    """Keep at most max_context lines of context at start and end."""
-    if not lines:
-        return lines
-
-    # Find first and last changed line indices
-    first_changed = None
-    last_changed = None
-    for i, entry in enumerate(lines):
-        if entry['type'] != 'context':
-            if first_changed is None:
-                first_changed = i
-            last_changed = i
-
-    if first_changed is None:
-        # All context, no changes — keep minimal
-        return lines[:max_context]
-
-    start = max(0, first_changed - max_context)
-    end = min(len(lines), last_changed + max_context + 1)
-    return lines[start:end]
 
 
 if __name__ == '__main__':
