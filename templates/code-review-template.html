@@ -596,6 +596,10 @@ a.bc-path { text-decoration: none; }
 
 <script>
 (function() {
+  var LINE_HEIGHT = 20;
+  var OVERDRAW = 8;
+  var _panelData = {};
+
   var data = JSON.parse(document.getElementById('review-data').textContent);
   var rawHunks = JSON.parse(document.getElementById('hunks-data').textContent);
   var hunksByFile = {};
@@ -1566,10 +1570,6 @@ a.bc-path { text-decoration: none; }
 
 
   // Virtual scrolling
-  var LINE_HEIGHT = 20;
-  var OVERDRAW = 8;
-  var _panelData = {};
-
   function renderVisibleLines(panelId) {
     var panel = document.getElementById(panelId);
     var data = _panelData[panelId];
