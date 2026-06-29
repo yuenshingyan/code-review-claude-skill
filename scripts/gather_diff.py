@@ -147,7 +147,33 @@ def build_excludes(skipped_files):
     return excludes
 
 
-def gather_uncommitted(meta_path, diff_path):
+def get_file_contents(kept_files, before_ref, read_disk=False):
+    contents = []
+    for filepath in kept_files:
+        before_result = subprocess.run(
+            ['git', 'show', f'{before_ref}:{filepath}'],
+            capture_output=True, text=True, errors='replace'
+        )
+        before_lines = before_result.stdout.splitlines() if before_result.returncode == 0 else []
+
+        if read_disk:
+            try:
+                with open(filepath, encoding='utf-8', errors='replace') as f:
+                    after_lines = f.read().splitlines()
+            except FileNotFoundError:
+                after_lines = []
+        else:
+            after_result = subprocess.run(
+                ['git', 'show', f'HEAD:{filepath}'],
+                capture_output=True, text=True, errors='replace'
+            )
+            after_lines = after_result.stdout.splitlines() if after_result.returncode == 0 else []
+
+        contents.append({'file': filepath, 'before_lines': before_lines, 'after_lines': after_lines})
+    return contents
+
+
+def gather_uncommitted(meta_path, diff_path, file_contents_path=None):
     # Get file list from both staged and unstaged
     stat_unstaged = run(['git', 'diff', '--stat'])
     stat_staged = run(['git', 'diff', '--cached', '--stat'])
@@ -210,10 +236,15 @@ def gather_uncommitted(meta_path, diff_path):
     with open(diff_path, 'w') as f:
         f.write(combined_diff)
 
+    if file_contents_path:
+        contents = get_file_contents(kept, before_ref='HEAD', read_disk=True)
+        with open(file_contents_path, 'w') as f:
+            json.dump(contents, f, ensure_ascii=False)
+
     print(f"{len(kept)} files, +{meta['stats']['added']}/-{meta['stats']['deleted']}, {len(skipped)} skipped")
 
 
-def gather_committed(base, meta_path, diff_path):
+def gather_committed(base, meta_path, diff_path, file_contents_path=None):
     # Verify base ref exists
     check = subprocess.run(['git', 'rev-parse', '--verify', base], capture_output=True, text=True)
     if check.returncode != 0:
@@ -279,6 +310,11 @@ def gather_committed(base, meta_path, diff_path):
     with open(diff_path, 'w') as f:
         f.write(diff)
 
+    if file_contents_path:
+        contents = get_file_contents(kept, before_ref=base, read_disk=False)
+        with open(file_contents_path, 'w') as f:
+            json.dump(contents, f, ensure_ascii=False)
+
     print(f"{len(kept)} files, +{added}/-{deleted}, {n_commits} commits, {len(skipped)} skipped")
 
 
@@ -287,13 +323,14 @@ if __name__ == '__main__':
     parser.add_argument('mode', help='uncommitted, branch, or a base ref')
     parser.add_argument('--meta', required=True, help='output path for metadata JSON')
     parser.add_argument('--diff', required=True, help='output path for raw diff')
+    parser.add_argument('--file-contents', dest='file_contents', help='output path for full file contents JSON')
     args = parser.parse_args()
 
     if args.mode == 'uncommitted':
-        gather_uncommitted(args.meta, args.diff)
+        gather_uncommitted(args.meta, args.diff, args.file_contents)
     elif args.mode == 'branch':
         base = detect_default_branch()
         print(f"Base branch: {base}")
-        gather_committed(base, args.meta, args.diff)
+        gather_committed(base, args.meta, args.diff, args.file_contents)
     else:
-        gather_committed(args.mode, args.meta, args.diff)
+        gather_committed(args.mode, args.meta, args.diff, args.file_contents)
