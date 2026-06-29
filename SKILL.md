@@ -145,8 +145,6 @@ Write as much as needed to make each field genuinely useful to someone reading t
         "breakingDetail": "<what breaks — only when breaking=true, else omit>",
         "context": "<2-3 sentences: what this file does, what changed, reviewer background>",
         "note": "<optional 'Also in this diff' note — omit if not needed>",
-        "before": "<BeforeAfterBlock or null (null for new files)>",
-        "after": "<BeforeAfterBlock or null (null for deleted files)>",
         "why": "<root cause or motivation — as much prose as needed>",
         "how": "<approach and key technical decisions — as much prose as needed>",
         "when": "<runtime conditions that activate this path — as much prose as needed>",
@@ -157,23 +155,10 @@ Write as much as needed to make each field genuinely useful to someone reading t
 }
 ```
 
-**BeforeAfterBlock:**
-```json
-{
-  "code": [],
-  "identifiers": [
-    { "name": "<identifier>", "desc": "<what it is>" }
-  ],
-  "explanation": "<one paragraph>"
-}
-```
-
-Always write `"code": []` — `build_review.py` populates code arrays by looking up the `lines` numbers in `hunks.json`. Write real `identifiers` and `explanation`; the script preserves them.
-
 ### Field rules
 
 - **No `id` or `summary` needed.** The template derives both automatically.
-- **`lines`:** Array of `old_start` integers from `hunks.json` — one per hunk that belongs to this section. Read `hunks.json`, find the hunks for this file by matching `file` path, and list their `old_start` values. For new files (no "before" side) use the hunk's `new_start` instead. Multiple values produce merged code blocks. This is how `build_review.py` locates the right code snippets; without it the section gets a "NO LINES" error.
+- **`lines`:** Array of `old_start` integers from `hunks.json` — one per hunk that belongs to this section. Read `hunks.json`, find the hunks for this file by matching `file` path, and list their `old_start` values. For new files (no "before" side) use the hunk's `new_start` instead. `build_review.py` uses the first value to resolve the starting line for the "Jump to line" button.
 - **`commits` (top-level):** Newest-first. From `meta.json`. Empty array for uncommitted mode.
 - **`commits` (per-section):** Short hashes of commits touching this file. Omit for uncommitted mode.
 - **`related`:** Array of file path strings. Detect from: imports, caller→callee, same-commit co-changes, migration+schema pairs, test+implementation pairs. 1–3 links per section max. The template automatically groups related sections into a collapsible visual container — no extra markup needed.
@@ -186,8 +171,7 @@ Always write `"code": []` — `build_review.py` populates code arrays by looking
 
 ### Content quality rules
 
-- **One section per logical change.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), emit one section per hunk — same `file` path, separate `desc`/`why`/`how`/`when`/`where`. Grouping distant hunks into one section causes the build script to fill all source lines between them as context, producing a very long snippet that spans multiple unrelated functions. If two hunks in the same file are more than ~30 lines apart, they belong in separate sections — use the `related` field to link them if they are conceptually connected.
-- Key identifiers should cover types, functions, fields a newcomer needs defined. Skip trivial ones (`i`, `db`, `Ok`). Include `kind` (function, variable, interface, type, class, const, enum) and `type` (type signature) when available — these help reviewers understand what each identifier is at a glance.
+- **One section per logical change.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), emit one section per hunk — same `file` path, separate `desc`/`why`/`how`/`when`/`where`. If two hunks are conceptually connected, link them with the `related` field.
 - `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - For deleted files: `after: null`.
 - For renamed files: include `oldFile`. Template shows "Renamed from …" automatically.
@@ -207,20 +191,6 @@ Always write `"code": []` — `build_review.py` populates code arrays by looking
   "breaking": true,
   "breakingDetail": "<code>AuthMiddleware::new()</code> now requires a <code>RefreshConfig</code> parameter.",
   "context": "This middleware intercepts every authenticated request and validates the JWT.",
-  "before": {
-    "code": [],
-    "identifiers": [
-      { "name": "AuthMiddleware", "desc": "Tower middleware for JWT validation" }
-    ],
-    "explanation": "The constructor only took a secret string."
-  },
-  "after": {
-    "code": [],
-    "identifiers": [
-      { "name": "RefreshConfig", "desc": "Holds grace_period and max_refreshes" }
-    ],
-    "explanation": "Now accepts a <code>RefreshConfig</code> for transparent token refresh."
-  },
   "why": "Users were getting logged out mid-session when their token expired during long form submissions.",
   "how": "Added a <code>RefreshConfig</code> parameter to <code>AuthMiddleware::new()</code> that enables transparent token refresh within a configurable grace period, avoiding forced re-authentication.",
   "when": "Activates on every authenticated HTTP request when the JWT is expired but within the grace period. Affects all users with active sessions during token rotation.",
@@ -238,12 +208,6 @@ Always write `"code": []` — `build_review.py` populates code arrays by looking
     "desc": "Resolve recipient emails from user IDs",
     "added": 6, "removed": 0,
     "lines": [20],
-    "before": null,
-    "after": {
-      "code": [],
-      "identifiers": [{ "name": "parsed_ids", "desc": "Validated i32 user IDs parsed from string input" }],
-      "explanation": "New block resolves recipient IDs to active user emails."
-    },
     "why": "Callers were passing raw IDs; the report needs email addresses.",
     "how": "Parses string IDs to i32, queries the Users table with <code>is_in</code> filter to batch-fetch matching user records.",
     "when": "Every time <code>send_report()</code> is called with recipient IDs — triggered by scheduled reports and manual sends.",
@@ -255,16 +219,6 @@ Always write `"code": []` — `build_review.py` populates code arrays by looking
     "desc": "Run report queries concurrently with try_join!",
     "added": 12, "removed": 18,
     "lines": [95],
-    "before": {
-      "code": [],
-      "identifiers": [],
-      "explanation": "Queries ran sequentially — each awaited before the next."
-    },
-    "after": {
-      "code": [],
-      "identifiers": [{ "name": "tokio::try_join!", "desc": "Runs futures concurrently, short-circuits on first error" }],
-      "explanation": "Queries now run concurrently via <code>try_join!</code>."
-    },
     "why": "Sequential queries added ~600ms latency to report generation.",
     "how": "Replaced sequential <code>.await</code> calls with <code>tokio::try_join!</code> to run both queries concurrently. Short-circuits on first error to preserve existing error behavior.",
     "when": "Every call to <code>gather_report_data()</code> — triggered by both scheduled and on-demand report generation.",
@@ -273,31 +227,21 @@ Always write `"code": []` — `build_review.py` populates code arrays by looking
 ]
 ```
 
-For `status: "new"` → set `before: null`.
-For `status: "deleted"` → set `after: null`.
 For `status: "renamed"` → add `"oldFile": "<original path>"`.
 
 ## Step 4 — Build the review
 
 ```bash
-python3 ~/.claude/skills/code-review/scripts/extract_scopes.py \
-  scratchpad/hunks.json \
-  scratchpad/scopes.json
-
 python3 ~/.claude/skills/code-review/scripts/build_review.py \
   scratchpad/hunks.json \
   scratchpad/review.json \
   ~/.claude/skills/code-review/templates/code-review-template.html \
-  code-review.html \
-  scratchpad/scopes.json
+  code-review.html
 ```
 
-The first script extracts scope-aware code blocks (full function/struct/enum/impl/trait bodies) from the parsed hunks. The second script assigns them to review sections, validates, and produces the HTML. If it exits 1, read the output to identify the issue:
+The script resolves each section's absolute file path and starting line number, then injects the review JSON into the HTML template. If it exits 1, read the output to identify the issue:
 
-- **NO LINES** — the section's `lines` array is missing or empty. Open `scratchpad/hunks.json`, find the entry for this file, and add the correct `old_start` (or `new_start` for new files) integers to the `lines` array.
-- **Gap violation** (`GAP: file (before): 73 → 130`) — the section references a hunk that spans two separate changes. Split the section into two entries and give each its own `lines` entry pointing to the correct hunk.
-- **NO BEFORE / NO AFTER** — the hunk was matched but the code array is empty on that side. Verify the file path matches exactly and that the `old_start` in `lines` corresponds to the right hunk.
-- **CONTEXT-ONLY** — the matched hunk had no added/removed lines on that side. Verify `status` is set correctly (`new`/`deleted`/`modified`).
+- **NO ABS PATH** — the section's `lines` array is missing or the `file` path doesn't match any entry in `hunks.json`. Open `scratchpad/hunks.json`, find the correct file entry, and update `lines` with the right `old_start` (or `new_start` for new files) integer.
 
 Fix the violations in `scratchpad/review.json` and re-run until exit 0.
 
