@@ -199,7 +199,7 @@ details summary::before {
 }
 details summary:hover::before { color: #8892a4; }
 details[open] summary::before { transform: rotate(90deg); }
-details > div, details > p, details > h4, details > ul, details > .diff-columns, details > .diff-full, details > .key-ids, details > .related-changes, details > .breaking-detail, details > .note { padding: 0 12px; }
+details > div, details > p, details > h4, details > ul, details > .related-changes, details > .breaking-detail, details > .note { padding: 0 12px; }
 .file-name { color: #4a9eff; text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 
 .desc { color: #8892a4; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
@@ -269,46 +269,31 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
   border-radius: 3px; padding: 8px 12px; margin: 4px 12px 12px;
 }
 
-/* Side-by-side diffs */
-.diff-columns {
-  display: grid; grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto 1fr auto auto; gap: 0 12px; min-width: 0;
-  margin: 12px 0;
+/* Diff action buttons */
+.diff-actions {
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 0 12px; padding: 0 12px;
 }
-.diff-col {
-  display: grid; grid-template-rows: subgrid; grid-row: span 4;
-  min-width: 0;
+.btn-open-diff {
+  background: rgba(74, 158, 255, 0.1); border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 3px; color: #4a9eff;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  padding: 5px 12px; cursor: pointer; text-decoration: none;
+  transition: background 100ms ease-out, border-color 100ms ease-out;
+  display: inline-flex; align-items: center; gap: 6px;
 }
-@media (max-width: 900px) { .diff-columns { grid-template-columns: 1fr; } }
-.diff-col h5 { color: #4a5568; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-.diff-col .cb { max-height: 70vh; overflow: auto; }
-.diff-full { margin: 12px 0; }
-
-/* Code blocks */
-.cb {
-  background: #1a1f28; border: 1px solid #1e2430; border-radius: 0;
-  padding: 10px 12px; overflow-x: auto; margin-bottom: 8px;
-  font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.55;
+.btn-open-diff:hover {
+  background: rgba(74, 158, 255, 0.2); border-color: rgba(74, 158, 255, 0.5);
 }
-.cb > div { white-space: pre; position: relative; padding-left: 40px; min-height: 1.55em; }
-.cb > div::before { content: attr(data-line); position: absolute; left: 0; width: 32px; text-align: right; color: #4a5568; font-size: 11px; user-select: none; }
-.cb .added { background: rgba(74,222,128,0.12); border-left: 2px solid #4ade80; margin: 0 -12px; padding: 0 12px 0 50px; width: max-content; min-width: calc(100% + 24px); }
-.cb .removed { background: rgba(248,113,113,0.12); border-left: 2px solid #f87171; margin: 0 -12px; padding: 0 12px 0 50px; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4); width: max-content; min-width: calc(100% + 24px); }
-.cb .added::before, .cb .removed::before { left: 10px; }
-.cb .hunk-sep { color: #4a5568; font-style: italic; text-align: center; padding: 2px 0; min-height: auto; background: rgba(255,255,255,0.03); border-top: 1px dashed #272d38; border-bottom: 1px dashed #272d38; margin: 4px 0; user-select: none; }
+.btn-jump-line {
+  background: none; border: 1px solid #1e2430; border-radius: 3px;
+  color: #8892a4; font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  padding: 5px 10px; cursor: pointer;
+  transition: color 100ms ease-out, border-color 100ms ease-out;
+}
+.btn-jump-line:hover { color: #e2e8f0; border-color: #3a4150; }
+.line-ref { color: #4a5568; font-family: 'IBM Plex Mono', monospace; font-size: 11px; align-self: center; }
 
-/* Key identifiers */
-.key-ids { margin: 8px 0; }
-.key-ids h5 { color: #4a5568; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-.key-ids ul { list-style: none; padding: 0; }
-.key-ids li { font-size: 12px; color: #8892a4; padding: 2px 0; }
-.key-ids code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #e2e8f0; background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 2px; }
-.id-kind { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #4a9eff; text-transform: lowercase; }
-.id-type { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #4a5568; }
-
-/* Explanations */
-.explanation { font-size: 12px; color: #8892a4; line-height: 1.55; margin: 6px 0; }
-.explanation strong { color: #e2e8f0; font-weight: 600; }
 h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px 0 4px; }
 .why { color: #8892a4; font-style: italic; font-size: 12px; margin: 4px 0 12px; line-height: 1.55; }
 
@@ -386,15 +371,12 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
   details summary::before { content: ''; }
   .file-name { color: #0055cc; }
   .desc { color: #666; }
-  .cb { background: #f5f5f5; border-color: #ddd; }
-  .cb .added { background: rgba(34,139,34,0.1); border-left-color: #228b22; }
-  .cb .removed { background: rgba(200,50,50,0.1); border-left-color: #c83232; }
   .summary-table td, .summary-table th { border-bottom-color: #ddd; }
   .badge-status.new { background: rgba(34,139,34,0.1); color: #228b22; border-color: #228b22; }
   .badge-status.deleted { background: rgba(200,50,50,0.1); color: #c83232; border-color: #c83232; }
   .badge-status.renamed { background: rgba(180,130,0,0.1); color: #8a6d00; border-color: #8a6d00; }
   .badge-status.modified { background: rgba(0,85,204,0.1); color: #0055cc; border-color: #0055cc; }
-  p.context, .explanation, .why { color: #555; }
+  p.context, .why { color: #555; }
   .annotation-row { border-bottom-color: #e0e0e0; }
   .annotation-label { color: #666; }
   .annotation-label.lbl-why { color: #0055cc; }
@@ -555,7 +537,7 @@ a.bc-path { text-decoration: none; }
 .change-group > section.change:nth-child(even) { background: rgba(0, 0, 0, 0.3); }
 .change-group > section.change:not(:last-of-type) { border-bottom: 1px solid #1e2430; }
 .change-group > section.change .related-changes { display: none; }
-.change-group > section.change details > div, details > p, details > h4, details > ul, details > .diff-columns, details > .diff-full, details > .key-ids, details > .related-changes, details > .breaking-detail, details > .note { padding: 0 12px; }
+.change-group > section.change details > div, details > p, details > h4, details > ul, details > .related-changes, details > .breaking-detail, details > .note { padding: 0 12px; }
 .change-group.collapsed > section.change { display: none; }
 
 /* Review checklist pills */
@@ -581,9 +563,6 @@ a.bc-path { text-decoration: none; }
 ::-webkit-scrollbar-thumb { background: #3a4150; border-radius: 3px; }
 ::-webkit-scrollbar-track { background: #0e1116; }
 </style>
-<style>/* HLJS_CSS_PLACEHOLDER */
-.hljs { background: transparent; }</style>
-<script>/* HLJS_JS_PLACEHOLDER */</script>
 </head>
 <body>
 <div class="container" id="cr-root"></div>
@@ -660,6 +639,7 @@ a.bc-path { text-decoration: none; }
   var ICON_PENCIL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
   var ICON_COPY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   var ICON_FILE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
+  var ICON_DIFF = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
 
   function esc(s) {
     var d = document.createElement('div');
@@ -806,152 +786,6 @@ a.bc-path { text-decoration: none; }
     return html;
   }
 
-  // Map file extension → highlight.js language name
-  var EXT_TO_LANG = {
-    'js': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
-    'ts': 'typescript', 'tsx': 'typescript', 'jsx': 'javascript',
-    'py': 'python', 'pyw': 'python',
-    'rb': 'ruby', 'go': 'go', 'rs': 'rust',
-    'java': 'java', 'kt': 'kotlin', 'kts': 'kotlin', 'scala': 'scala',
-    'c': 'c', 'h': 'c', 'cpp': 'cpp', 'cc': 'cpp', 'cxx': 'cpp', 'hpp': 'cpp',
-    'cs': 'csharp', 'fs': 'fsharp',
-    'sh': 'bash', 'bash': 'bash', 'zsh': 'bash', 'fish': 'bash',
-    'html': 'xml', 'htm': 'xml', 'xml': 'xml', 'svg': 'xml',
-    'css': 'css', 'scss': 'scss', 'less': 'less',
-    'json': 'json', 'jsonc': 'json',
-    'yaml': 'yaml', 'yml': 'yaml',
-    'toml': 'ini', 'ini': 'ini', 'cfg': 'ini',
-    'md': 'markdown', 'markdown': 'markdown',
-    'sql': 'sql', 'php': 'php', 'swift': 'swift',
-    'ex': 'elixir', 'exs': 'elixir',
-    'r': 'r', 'lua': 'lua', 'dart': 'dart', 'vim': 'vim',
-    'tf': 'hcl', 'hcl': 'hcl',
-    'dockerfile': 'dockerfile', 'makefile': 'makefile',
-    'proto': 'protobuf', 'graphql': 'graphql', 'gql': 'graphql',
-    'pl': 'perl', 'pm': 'perl', 'hs': 'haskell', 'lhs': 'haskell',
-    'clj': 'clojure', 'cljs': 'clojure',
-    'erl': 'erlang', 'hrl': 'erlang',
-    'ml': 'ocaml', 'mli': 'ocaml',
-    'pas': 'delphi', 'pp': 'delphi',
-    'nim': 'nim', 'cr': 'crystal', 'jl': 'julia',
-    'zig': 'zig', 'v': 'v',
-    'ps1': 'powershell', 'psm1': 'powershell',
-    'bat': 'dos', 'cmd': 'dos',
-    'coffee': 'coffeescript',
-    'groovy': 'groovy', 'gradle': 'groovy',
-    'tex': 'latex', 'latex': 'latex',
-    'diff': 'diff', 'patch': 'diff'
-  };
-
-  function langFromFile(file) {
-    if (!file) return null;
-    var base = file.split('/').pop();
-    var lower = base.toLowerCase();
-    // Files with no extension (Dockerfile, Makefile, etc.)
-    if (lower === 'dockerfile' || lower.startsWith('dockerfile.')) return 'dockerfile';
-    if (lower === 'makefile' || lower === 'gnumakefile') return 'makefile';
-    var dot = base.lastIndexOf('.');
-    if (dot === -1) return null;
-    var ext = base.slice(dot + 1).toLowerCase();
-    return EXT_TO_LANG[ext] || null;
-  }
-
-  // Split highlight.js-generated HTML by \n, keeping HTML spans balanced across lines.
-  function splitHighlightedLines(html) {
-    var lines = [];
-    var line = '';
-    var openTags = [];
-    var i = 0;
-    while (i < html.length) {
-      if (html[i] === '<') {
-        var j = html.indexOf('>', i);
-        if (j === -1) { line += html.slice(i); break; }
-        var tag = html.slice(i, j + 1);
-        line += tag;
-        if (tag[1] === '/') {
-          openTags.pop();
-        } else if (tag[tag.length - 2] !== '/') {
-          openTags.push(tag);
-        }
-        i = j + 1;
-      } else if (html[i] === '\n') {
-        for (var t = openTags.length - 1; t >= 0; t--) {
-          var m = openTags[t].match(/<([\w-]+)/);
-          if (m) line += '</' + m[1] + '>';
-        }
-        lines.push(line);
-        line = openTags.join('');
-        i++;
-      } else {
-        line += html[i];
-        i++;
-      }
-    }
-    if (line) lines.push(line);
-    return lines;
-  }
-
-  // Build code block
-  function buildCB(lines, lang) {
-    var html = '<div class="cb">';
-    // Split lines into segments separated by separator markers for independent highlighting
-    var segments = [[]];
-    lines.forEach(function(l) {
-      if (l.type === 'separator') {
-        segments.push(null); // null = separator
-        segments.push([]);
-      } else {
-        segments[segments.length - 1].push(l);
-      }
-    });
-    segments.forEach(function(seg) {
-      if (seg === null) {
-        html += '<div class="hunk-sep" data-line="">⋮</div>';
-        return;
-      }
-      var hlLines = null;
-      if (typeof hljs !== 'undefined' && seg.length > 0) {
-        try {
-          var fullCode = seg.map(function(l) { return l.text; }).join('\n');
-          var result = (lang && hljs.getLanguage(lang))
-            ? hljs.highlight(fullCode, {language: lang, ignoreIllegals: true})
-            : hljs.highlightAuto(fullCode);
-          hlLines = splitHighlightedLines(result.value);
-        } catch (e) {
-          hlLines = null;
-        }
-      }
-      seg.forEach(function(l, i) {
-        var cls = l.type === 'added' ? ' class="added"' : l.type === 'removed' ? ' class="removed"' : '';
-        var ln = (l.line != null && l.line !== '') ? String(l.line) : '';
-        var content = (hlLines && hlLines[i] !== undefined) ? hlLines[i] : esc(l.text);
-        html += '<div' + cls + ' data-line="' + esc(ln) + '">' + content + '</div>';
-      });
-    });
-    html += '</div>';
-    return html;
-  }
-
-  // Build identifiers list
-  function buildIds(ids) {
-    if (!ids || ids.length === 0) return '';
-    var html = '<div class="key-ids"><h5>Key identifiers</h5><ul>';
-    ids.forEach(function(id) {
-      var prefix = id.kind ? '<span class="id-kind">' + esc(id.kind) + '</span> ' : '';
-      var typeSuffix = id.type ? ' <span class="id-type">' + esc(id.type) + '</span>' : '';
-      html += '<li>' + prefix + '<code>' + esc(id.name) + '</code>' + typeSuffix + ' — ' + esc(id.desc) + '</li>';
-    });
-    html += '</ul></div>';
-    return html;
-  }
-
-  // Build a diff column (before or after)
-  function buildDiffCol(block, label, lang) {
-    return '<div class="diff-col"><h5>' + label + '</h5>' +
-      buildCB(block.code, lang) +
-      buildIds(block.identifiers) + '</div>';
-  }
-
   // Build sections
   function buildSection(s) {
     var html = '<section class="change" id="' + esc(s.id) + '" data-search-file="' + esc(s.file).toLowerCase() + '" data-search-desc="' + esc(s.desc).toLowerCase() + '"><details><summary>';
@@ -1021,28 +855,16 @@ a.bc-path { text-decoration: none; }
       html += '</div>';
     }
 
-    // Diff layout
-    var sLang = langFromFile(s.file);
-    if (s.before && s.after) {
-      // Side-by-side
-      html += '<div class="diff-columns">' +
-        buildDiffCol(s.before, 'Before', sLang) +
-        buildDiffCol(s.after, 'After', sLang) +
-        '</div>';
-    } else if (s.before && !s.after) {
-      // Deletion-only: show before block full-width
-      html += '<div class="diff-full">' + buildCB(s.before.code, sLang) + '</div>';
-      if (s.before.identifiers && s.before.identifiers.length > 0) {
-        html += buildIds(s.before.identifiers);
+    // Diff action buttons — open VSCode's native diff panel for this file
+    if (s.absPath) {
+      var uriEncoded = encodeURIComponent(JSON.stringify([{scheme: 'file', path: s.absPath}]));
+      html += '<div class="diff-actions">';
+      html += '<a class="btn-open-diff" href="command:git.openChange?' + uriEncoded + '">' + ICON_DIFF + ' Open in Diff Editor</a>';
+      if (s.startLine) {
+        html += '<button class="btn-jump-line" data-abs-path="' + esc(s.absPath) + '" data-line="' + s.startLine + '">Jump to line ' + s.startLine + '</button>';
+        html += '<span class="line-ref">:' + s.startLine + '</span>';
       }
-
-    } else if (s.after) {
-      // Addition-only: show after block full-width
-      html += '<div class="diff-full">' + buildCB(s.after.code, sLang) + '</div>';
-      if (s.after.identifiers && s.after.identifiers.length > 0) {
-        html += buildIds(s.after.identifiers);
-      }
-
+      html += '</div>';
     }
 
     if (s.note) {
@@ -1281,31 +1103,8 @@ a.bc-path { text-decoration: none; }
     }
     lines.push('**Context:** ' + (s.context || '').replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
     lines.push('');
-    function codeBlockMd(block, label) {
-      if (!block) return;
-      lines.push('### ' + label);
-      lines.push('```');
-      block.code.forEach(function(l) {
-        if (l.type === 'separator') { lines.push('  ...'); return; }
-        var prefix = l.type === 'added' ? '+ ' : l.type === 'removed' ? '- ' : '  ';
-        var ln = (l.line != null && l.line !== '') ? String(l.line).padStart(4) + ' ' : '     ';
-        lines.push(prefix + ln + l.text);
-      });
-      lines.push('```');
-      if (block.identifiers && block.identifiers.length > 0) {
-        lines.push('**Key identifiers:**');
-        block.identifiers.forEach(function(id) {
-          lines.push('- `' + id.name + '` — ' + id.desc);
-        });
-      }
-      if (block.explanation) {
-        lines.push('');
-        lines.push(block.explanation.replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
-      }
-      lines.push('');
-    }
-    codeBlockMd(s.before, 'Before');
-    codeBlockMd(s.after, 'After');
+    if (s.absPath) lines.push('**File:** `' + s.absPath + (s.startLine ? ':' + s.startLine : '') + '`');
+    lines.push('');
     var annoLabels = { why: 'WHY', how: 'HOW', when: 'WHEN', where: 'WHERE' };
     ['why', 'how', 'when', 'where'].forEach(function(a) {
       if (s[a]) lines.push('**' + annoLabels[a] + ':** ' + s[a].replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
@@ -1737,22 +1536,14 @@ a.bc-path { text-decoration: none; }
     });
   });
 
-  // Synchronized scroll for side-by-side diff panels
-  root.querySelectorAll('.diff-columns').forEach(function(cols) {
-    var panels = cols.querySelectorAll('.diff-col .cb');
-    if (panels.length !== 2) return;
-    var syncing = false;
-    function makeSyncHandler(from, to) {
-      return function() {
-        if (syncing) return;
-        syncing = true;
-        to.scrollTop = from.scrollTop;
-        to.scrollLeft = from.scrollLeft;
-        syncing = false;
-      };
-    }
-    panels[0].addEventListener('scroll', makeSyncHandler(panels[0], panels[1]));
-    panels[1].addEventListener('scroll', makeSyncHandler(panels[1], panels[0]));
+  // "Jump to line" button — re-opens file at the starting line of the change
+  root.addEventListener('click', function(e) {
+    var btn = e.target.closest('.btn-jump-line');
+    if (!btn) return;
+    e.stopPropagation();
+    var path = btn.dataset.absPath;
+    var line = btn.dataset.line || '1';
+    window.location.href = 'vscode://file/' + path + ':' + line;
   });
 
   // Deep linking: read hash on load, update on tab switch / section open
