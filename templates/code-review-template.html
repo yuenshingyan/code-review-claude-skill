@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -281,6 +283,8 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 .diff-minimap-tick.removed { background: rgba(248, 113, 113, 0.85); }
 .diff-minimap-tick.added { background: rgba(74, 222, 128, 0.75); }
 .diff-minimap-viewport { position: absolute; left: 0; right: 0; background: rgba(255,255,255,0.06); border-top: 1px solid rgba(255,255,255,0.1); border-bottom: 1px solid rgba(255,255,255,0.1); pointer-events: none; min-height: 8px; display: none; }
+/* prevent hljs theme from overriding panel backgrounds */
+.diff-panel pre code.hljs, .diff-panel code.hljs, .diff-line-text { background: transparent !important; padding: 0 !important; }
 .btn-jump-start {
   background: none; border: 1px solid #1e2430; border-radius: 3px;
   color: #8892a4; font-family: 'IBM Plex Mono', monospace; font-size: 10px;
@@ -824,7 +828,7 @@ a.bc-path { text-decoration: none; }
         '</div>';
     }
     var sid = esc(s.id);
-    return '<div class="diff-panels" data-section-id="' + sid + '" data-start-line="' + (s.startLine || 1) + '">' +
+    return '<div class="diff-panels" data-section-id="' + sid + '" data-start-line="' + (s.startLine || 1) + '" data-file="' + esc(s.file) + '">' +
       '<div class="diff-panel-wrap">' +
         '<div class="diff-panel" id="diff-before-' + sid + '"><div class="diff-panel-header">Before</div>' +
         renderLines(fileContent.before_lines, removedLines, 'removed') + '</div>' +
@@ -1600,6 +1604,94 @@ a.bc-path { text-decoration: none; }
     });
   }
 
+  // Syntax highlighting
+  var EXT_TO_LANG = {
+    js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
+    ts: 'typescript', tsx: 'typescript',
+    py: 'python', pyw: 'python',
+    rb: 'ruby', rake: 'ruby',
+    go: 'go',
+    rs: 'rust',
+    java: 'java',
+    kt: 'kotlin', kts: 'kotlin',
+    swift: 'swift',
+    c: 'c', h: 'c',
+    cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp',
+    cs: 'csharp',
+    php: 'php',
+    html: 'xml', htm: 'xml', xml: 'xml', svg: 'xml',
+    css: 'css', scss: 'scss', less: 'less',
+    json: 'json', jsonc: 'json',
+    yaml: 'yaml', yml: 'yaml',
+    sh: 'bash', bash: 'bash', zsh: 'bash',
+    sql: 'sql',
+    md: 'markdown',
+    scala: 'scala',
+    dart: 'dart',
+    lua: 'lua',
+    r: 'r',
+    tf: 'hcl', hcl: 'hcl',
+    toml: 'ini', ini: 'ini',
+  };
+
+  function splitHighlightedLines(html) {
+    var lines = [], line = '', open = [];
+    var i = 0, n = html.length;
+    while (i < n) {
+      if (html[i] === '\n') {
+        var close = open.map(function() { return '</span>'; }).join('');
+        var reopen = open.map(function(cls) { return '<span class="' + cls + '">'; }).join('');
+        lines.push(line + close);
+        line = reopen;
+        i++;
+      } else if (html[i] === '<') {
+        var end = html.indexOf('>', i);
+        if (end === -1) { line += html.slice(i); break; }
+        var tag = html.slice(i, end + 1);
+        line += tag;
+        if (tag.slice(0, 2) === '</') {
+          open.pop();
+        } else {
+          var m = tag.match(/class="([^"]*)"/);
+          if (m) open.push(m[1]);
+        }
+        i = end + 1;
+      } else {
+        line += html[i++];
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  function applyHighlighting(panelId, lines, lang) {
+    var panel = document.getElementById(panelId);
+    if (!panel || !window.hljs) return;
+    var highlighted;
+    try {
+      highlighted = hljs.highlight(lines.join('\n'), { language: lang, ignoreIllegals: true }).value;
+    } catch(e) { return; }
+    var hlLines = splitHighlightedLines(highlighted);
+    var spans = panel.querySelectorAll('.diff-line-text');
+    spans.forEach(function(span, i) {
+      if (i < hlLines.length) span.innerHTML = hlLines[i];
+    });
+  }
+
+  function highlightPanels(container) {
+    if (container.dataset.highlighted) return;
+    container.dataset.highlighted = '1';
+    var file = container.dataset.file || '';
+    var ext = file.split('.').pop().toLowerCase();
+    var lang = EXT_TO_LANG[ext];
+    if (!lang) return;
+    var sid = container.dataset.sectionId;
+    var fc = fileContentsByFile[file];
+    if (!fc) return;
+    applyHighlighting('diff-before-' + sid, fc.before_lines, lang);
+    applyHighlighting('diff-after-' + sid, fc.after_lines, lang);
+  }
+
   // Auto-scroll panels to startLine when a section is opened
   root.addEventListener('toggle', function(e) {
     if (!e.target.open) return;
@@ -1608,6 +1700,7 @@ a.bc-path { text-decoration: none; }
     var sid = panels.dataset.sectionId;
     scrollPanelsToLine(sid, parseInt(panels.dataset.startLine, 10) || 1);
     ['diff-before-', 'diff-after-'].forEach(function(prefix) { updateMinimap(prefix + sid); });
+    highlightPanels(panels);
   }, true);
 
   // Jump button in section header
