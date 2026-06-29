@@ -71,9 +71,10 @@ def validate(review):
 
 DEFAULT_PLACEHOLDER = '{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{}}'
 HUNKS_PLACEHOLDER = '<script id="hunks-data" type="application/json">[]</script>'
+FILE_CONTENTS_PLACEHOLDER = '<script id="file-contents-data" type="application/json">[]</script>'
 
 
-def inject(review, parsed, template_path, output_path):
+def inject(review, parsed, file_contents, template_path, output_path):
     with open(template_path, encoding='utf-8') as f:
         template = f.read()
 
@@ -89,6 +90,9 @@ def inject(review, parsed, template_path, output_path):
     hunks_str = json.dumps(parsed, ensure_ascii=False)
     result = result.replace(HUNKS_PLACEHOLDER, f'<script id="hunks-data" type="application/json">{hunks_str}</script>')
 
+    file_contents_str = json.dumps(file_contents, ensure_ascii=False)
+    result = result.replace(FILE_CONTENTS_PLACEHOLDER, f'<script id="file-contents-data" type="application/json">{file_contents_str}</script>')
+
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(result)
 
@@ -97,17 +101,20 @@ def inject(review, parsed, template_path, output_path):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 5:
-        print(f"Usage: {sys.argv[0]} <hunks.json> <review.json> <template.html> <output.html>")
+    if len(sys.argv) != 6:
+        print(f"Usage: {sys.argv[0]} <hunks.json> <file-contents.json> <review.json> <template.html> <output.html>")
         sys.exit(2)
 
     hunks_path = sys.argv[1]
-    review_path = sys.argv[2]
-    template_path = sys.argv[3]
-    output_path = sys.argv[4]
+    file_contents_path = sys.argv[2]
+    review_path = sys.argv[3]
+    template_path = sys.argv[4]
+    output_path = sys.argv[5]
 
     with open(hunks_path) as f:
         parsed = json.load(f)
+    with open(file_contents_path) as f:
+        file_contents = json.load(f)
     with open(review_path) as f:
         review = json.load(f)
 
@@ -117,7 +124,7 @@ if __name__ == '__main__':
         print("\nFix missing paths before injecting.")
         sys.exit(1)
 
-    if not inject(review, parsed, template_path, output_path):
+    if not inject(review, parsed, file_contents, template_path, output_path):
         sys.exit(1)
 
     with open(review_path, 'w') as f:
