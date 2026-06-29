@@ -2,19 +2,24 @@
 """Build code-review.html from parsed hunks and editorial review JSON.
 
 Usage:
-    python3 build_review.py <hunks.json> <review.json> <template.html> <output.html>
+    python3 build_review.py <hunks.json> <review.json> <template.html> <output.html> [scopes.json]
 
 Steps:
-1. Match review sections to parsed diff hunks by line number
+1. Match review sections to parsed diff hunks (by scopes or line number)
 2. Validate (hunk gaps, missing blocks)
 3. Inject the final JSON into the HTML template
 4. Write output HTML
 
-Hunk matching strategy:
+Scope-aware mode (when scopes.json is provided):
+- Each section is matched to scope blocks by file path
+- Each scope (fn/struct/enum/impl/trait) that contains changed lines
+  is shown in full — no manual "lines" array needed
+- Multiple scopes in the same file produce separate code blocks
+  separated by '...' markers
+
+Fallback mode (no scopes.json):
 - Each section specifies a "lines" array of old_start line numbers
 - The build script looks up each line number in the file's hunk list
-- Multiple line numbers produce merged code blocks with separators
-- No keyword scoring or claimed-set tracking needed
 
 Exit code 0 on success, 1 if hunk gap violations or injection failure.
 """
@@ -177,6 +182,206 @@ def build_hunk_index(hunks):
     for hunk in hunks:
         index[hunk['old_start']] = hunk
     return index
+
+
+def _scope_blocks_to_code(blocks):
+    """Convert scope blocks into a merged code array with '...' separators."""
+    merged = []
+    for block in blocks:
+        if merged:
+            merged.append({'line': '', 'text': '...', 'type': 'separator'})
+        merged.extend(block['code'])
+    return merged
+
+
+def _match_scope_blocks(scope_entry, section):
+    """Match scope blocks to a section based on line overlap with hunks.
+
+    When multiple sections share the same file, each section's 'lines' array
+    (if present) determines which scope blocks it gets. If no 'lines' are
+    specified, all blocks for the file are returned.
+    """
+    line_numbers = section.get('lines', [])
+    if not line_numbers:
+        # No lines specified — return all blocks
+        return scope_entry.get('before_blocks', []), scope_entry.get('after_blocks', [])
+
+    line_set = set(line_numbers)
+
+    def blocks_overlapping(blocks):
+        matched = []
+        for block in blocks:
+            # Check if any of the section's line numbers fall within this scope
+            for ln in line_set:
+                if block['scope_start'] <= ln <= block['scope_end']:
+                    matched.append(block)
+                    break
+            # Also check if any changed line in the block matches
+            if block not in matched:
+                changed_in_block = {
+                    item['line'] for item in block['code']
+                    if item['type'] in ('added', 'removed')
+                }
+                if changed_in_block & line_set:
+                    matched.append(block)
+        return matched
+
+    before = blocks_overlapping(scope_entry.get('before_blocks', []))
+    after = blocks_overlapping(scope_entry.get('after_blocks', []))
+    return before, after
+
+
+def _hunk_fallback(section, file_hunks):
+    """Fall back to hunk-based code blocks for a section (used when scopes are empty)."""
+    file_path = section['file']
+    hunk_index = file_hunks.get(file_path, {})
+    if not hunk_index:
+        return False
+
+    status = section.get('status', 'modified')
+    line_numbers = section.get('lines', [])
+
+    if line_numbers:
+        matched_hunks = [hunk_index[ln] for ln in line_numbers if ln in hunk_index]
+    else:
+        matched_hunks = list(hunk_index.values())
+
+    if not matched_hunks:
+        return False
+
+    if status == 'new':
+        section['before'] = None
+        section['after'] = {
+            'code': prepend_function_context(merge_hunk_sides(matched_hunks, 'after', file_path), file_path),
+            'identifiers': preserve_field(section, 'after', 'identifiers'),
+            'explanation': preserve_field(section, 'after', 'explanation'),
+        }
+    elif status == 'deleted':
+        section['before'] = {
+            'code': prepend_function_context(merge_hunk_sides(matched_hunks, 'before', file_path), file_path),
+            'identifiers': preserve_field(section, 'before', 'identifiers'),
+            'explanation': preserve_field(section, 'before', 'explanation'),
+        }
+        section['after'] = None
+    else:
+        section['before'] = {
+            'code': prepend_function_context(merge_hunk_sides(matched_hunks, 'before', file_path), file_path),
+            'identifiers': preserve_field(section, 'before', 'identifiers'),
+            'explanation': preserve_field(section, 'before', 'explanation'),
+        }
+        section['after'] = {
+            'code': prepend_function_context(merge_hunk_sides(matched_hunks, 'after', file_path), file_path),
+            'identifiers': preserve_field(section, 'after', 'identifiers'),
+            'explanation': preserve_field(section, 'after', 'explanation'),
+        }
+    return True
+
+
+def _section_has_code(section):
+    """Check if a section has non-empty code blocks after scope assignment."""
+    for side in ('before', 'after'):
+        block = section.get(side)
+        if isinstance(block, dict) and block.get('code'):
+            return True
+    return False
+
+
+def rebuild_with_scopes(review, parsed, scopes):
+    """Rebuild review sections using scope-aware blocks.
+    Falls back to hunk-based rendering when scopes produce no code."""
+    file_scopes = {entry['file']: entry for entry in scopes}
+    file_hunks = {}
+    for entry in parsed:
+        file_hunks[entry['file']] = build_hunk_index(entry['hunks'])
+
+    file_claimed_before = {}
+    file_claimed_after = {}
+
+    # First pass: assign blocks to sections that have explicit 'lines'
+    for tab, entries in review['sections'].items():
+        for section in entries:
+            file_path = section['file']
+            scope_entry = file_scopes.get(file_path)
+            if not scope_entry:
+                continue
+            if not section.get('lines'):
+                continue
+
+            before_blocks, after_blocks = _match_scope_blocks(scope_entry, section)
+            if file_path not in file_claimed_before:
+                file_claimed_before[file_path] = set()
+                file_claimed_after[file_path] = set()
+            for b in before_blocks:
+                file_claimed_before[file_path].add((b['scope_start'], b['scope_end']))
+            for b in after_blocks:
+                file_claimed_after[file_path].add((b['scope_start'], b['scope_end']))
+
+            _apply_scope_blocks(section, before_blocks, after_blocks)
+
+    # Second pass: sections without 'lines' get all unclaimed blocks
+    for tab, entries in review['sections'].items():
+        for section in entries:
+            file_path = section['file']
+            scope_entry = file_scopes.get(file_path)
+            if not scope_entry:
+                continue
+            if section.get('lines'):
+                continue
+
+            claimed_b = file_claimed_before.get(file_path, set())
+            claimed_a = file_claimed_after.get(file_path, set())
+
+            before_blocks = [
+                b for b in scope_entry.get('before_blocks', [])
+                if (b['scope_start'], b['scope_end']) not in claimed_b
+            ]
+            after_blocks = [
+                b for b in scope_entry.get('after_blocks', [])
+                if (b['scope_start'], b['scope_end']) not in claimed_a
+            ]
+
+            _apply_scope_blocks(section, before_blocks, after_blocks)
+
+    # Third pass: fall back to hunk-based rendering for sections with empty code
+    fallback_count = 0
+    for tab, entries in review['sections'].items():
+        for section in entries:
+            if not _section_has_code(section):
+                if _hunk_fallback(section, file_hunks):
+                    fallback_count += 1
+    if fallback_count:
+        print(f"  Hunk fallback used for {fallback_count} section(s)")
+
+
+def _apply_scope_blocks(section, before_blocks, after_blocks):
+    """Set the before/after code on a section from matched scope blocks."""
+    status = section.get('status', 'modified')
+
+    if status == 'new':
+        section['before'] = None
+        section['after'] = {
+            'code': _scope_blocks_to_code(after_blocks) if after_blocks else [],
+            'identifiers': preserve_field(section, 'after', 'identifiers'),
+            'explanation': preserve_field(section, 'after', 'explanation'),
+        }
+    elif status == 'deleted':
+        section['before'] = {
+            'code': _scope_blocks_to_code(before_blocks) if before_blocks else [],
+            'identifiers': preserve_field(section, 'before', 'identifiers'),
+            'explanation': preserve_field(section, 'before', 'explanation'),
+        }
+        section['after'] = None
+    else:
+        section['before'] = {
+            'code': _scope_blocks_to_code(before_blocks) if before_blocks else [],
+            'identifiers': preserve_field(section, 'before', 'identifiers'),
+            'explanation': preserve_field(section, 'before', 'explanation'),
+        }
+        section['after'] = {
+            'code': _scope_blocks_to_code(after_blocks) if after_blocks else [],
+            'identifiers': preserve_field(section, 'after', 'identifiers'),
+            'explanation': preserve_field(section, 'after', 'explanation'),
+        }
 
 
 def rebuild(review, parsed):
@@ -344,21 +549,29 @@ def inject(review, template_path, output_path):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 5:
-        print(f"Usage: {sys.argv[0]} <hunks.json> <review.json> <template.html> <output.html>")
+    if len(sys.argv) not in (5, 6):
+        print(f"Usage: {sys.argv[0]} <hunks.json> <review.json> <template.html> <output.html> [scopes.json]")
         sys.exit(2)
 
     hunks_path = sys.argv[1]
     review_path = sys.argv[2]
     template_path = sys.argv[3]
     output_path = sys.argv[4]
+    scopes_path = sys.argv[5] if len(sys.argv) == 6 else None
 
     with open(hunks_path) as f:
         parsed = json.load(f)
     with open(review_path) as f:
         review = json.load(f)
 
-    rebuild(review, parsed)
+    if scopes_path and os.path.isfile(scopes_path):
+        with open(scopes_path) as f:
+            scopes = json.load(f)
+        print(f"Scope-aware mode: {scopes_path}")
+        rebuild_with_scopes(review, parsed, scopes)
+    else:
+        rebuild(review, parsed)
+
     violations = validate(review)
 
     if violations:
