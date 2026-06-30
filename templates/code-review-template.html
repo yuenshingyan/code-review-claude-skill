@@ -813,6 +813,10 @@ a.bc-path { text-decoration: none; }
       (h.before || []).forEach(function(l) { if (l.type === 'removed') removedLines[l.line] = true; });
       (h.after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
     });
+    var hasRemovals  = Object.keys(removedLines).length > 0;
+    var hasAdditions = Object.keys(addedLines).length  > 0;
+    var showBefore = !hasAdditions || hasRemovals;
+    var showAfter  = !hasRemovals  || hasAdditions;
     var sid = esc(s.id);
     var beforeH = fileContent.before_lines.length * LINE_HEIGHT;
     var afterH  = fileContent.after_lines.length  * LINE_HEIGHT;
@@ -826,19 +830,22 @@ a.bc-path { text-decoration: none; }
       '<div class="diff-minimap-header"></div>' +
       '<canvas class="diff-minimap-canvas" data-minimap=\'' + mmData.replace(/'/g, '&#39;') + '\'></canvas>' +
       '</div>';
-    return '<div class="diff-panels" data-section-id="' + sid + '" data-start-line="' + (s.startLine || 1) + '" data-file="' + esc(s.file) + '">' +
-      '<div class="diff-panel-wrap">' +
-        '<div class="diff-panel-header">Before</div>' +
-        '<div class="diff-panel" id="diff-before-' + sid + '">' +
-          '<div class="diff-panel-spacer" style="height:' + beforeH + 'px"><div class="diff-panel-content"></div></div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="diff-panel-wrap">' +
-        '<div class="diff-panel-header">After</div>' +
-        '<div class="diff-panel" id="diff-after-' + sid + '">' +
-          '<div class="diff-panel-spacer" style="height:' + afterH + 'px"><div class="diff-panel-content"></div></div>' +
-        '</div>' +
-      '</div>' +
+    var cols = (showBefore && showAfter) ? '1fr 1fr auto' : '1fr auto';
+    return '<div class="diff-panels" style="grid-template-columns:' + cols + '" data-section-id="' + sid + '" data-start-line="' + (s.startLine || 1) + '" data-file="' + esc(s.file) + '">' +
+      (showBefore ?
+        '<div class="diff-panel-wrap">' +
+          '<div class="diff-panel-header">Before</div>' +
+          '<div class="diff-panel" id="diff-before-' + sid + '">' +
+            '<div class="diff-panel-spacer" style="height:' + beforeH + 'px"><div class="diff-panel-content"></div></div>' +
+          '</div>' +
+        '</div>' : '') +
+      (showAfter ?
+        '<div class="diff-panel-wrap">' +
+          '<div class="diff-panel-header">After</div>' +
+          '<div class="diff-panel" id="diff-after-' + sid + '">' +
+            '<div class="diff-panel-spacer" style="height:' + afterH + 'px"><div class="diff-panel-content"></div></div>' +
+          '</div>' +
+        '</div>' : '') +
       minimap +
       '</div>';
   }
