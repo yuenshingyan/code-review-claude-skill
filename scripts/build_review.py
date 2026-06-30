@@ -184,11 +184,11 @@ if __name__ == '__main__':
     template_path = sys.argv[4]
     output_path = sys.argv[5]
 
-    with open(hunks_path) as f:
+    with open(hunks_path, encoding="utf-8") as f:
         parsed = json.load(f)
-    with open(file_contents_path) as f:
+    with open(file_contents_path, encoding="utf-8") as f:
         file_contents = json.load(f)
-    with open(review_path) as f:
+    with open(review_path, encoding="utf-8") as f:
         review = json.load(f)
 
     embed_diff_metadata(review, parsed)
@@ -200,5 +200,5 @@ if __name__ == '__main__':
     if not inject(review, parsed, file_contents, template_path, output_path):
         sys.exit(1)
 
-    with open(review_path, 'w') as f:
+    with open(review_path, 'w', encoding="utf-8") as f:
         json.dump(review, f, indent=2, ensure_ascii=False)
