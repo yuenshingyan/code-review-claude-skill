@@ -1749,17 +1749,11 @@ a.bc-path { text-decoration: none; }
     var file = container.dataset.file;
     var fc   = fileContentsByFile[file];
     if (fc) {
-      var fileHunks = hunksByFile[file] || [];
-      var sectionData = findSectionData(sid);
-      var relevantStarts = new Set((sectionData && sectionData.lines) || []);
-      var relevantHunks = relevantStarts.size === 0 ? fileHunks : fileHunks.filter(function(h) {
-        return (sectionData && sectionData.status === 'new') ? relevantStarts.has(h.new_start) : relevantStarts.has(h.old_start);
-      });
+      var canvas = container.querySelector('.diff-minimap-canvas');
+      var mmData = canvas ? JSON.parse(canvas.dataset.minimap) : {r: [], a: []};
       var removedLines = {}, addedLines = {};
-      relevantHunks.forEach(function(h) {
-        (h.before || []).forEach(function(l) { if (l.type === 'removed') removedLines[l.line] = true; });
-        (h.after  || []).forEach(function(l) { if (l.type === 'added')   addedLines[l.line]  = true; });
-      });
+      (mmData.r || []).forEach(function(n) { removedLines[n] = true; });
+      (mmData.a || []).forEach(function(n) { addedLines[n] = true; });
       _panelData['diff-before-' + sid] = { lines: fc.before_lines, changedSet: removedLines, changedClass: 'removed', hlLines: null };
       _panelData['diff-after-'  + sid] = { lines: fc.after_lines,  changedSet: addedLines,   changedClass: 'added',   hlLines: null };
     }
