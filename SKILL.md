@@ -177,6 +177,7 @@ Write as much as needed to make each field genuinely useful to someone reading t
 - `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - For deleted files: `after: null`.
 - For renamed files: include `oldFile`. Template shows "Renamed from …" automatically.
+- **Dashes:** Use regular hyphens/dashes (`-`) in all review text. Never use em dashes (`—`) or en dashes (`–`).
 
 ### Example section (modified file)
 
