@@ -173,7 +173,7 @@ def get_file_contents(kept_files, before_ref, read_disk=False):
     return contents
 
 
-def gather_uncommitted(meta_path, diff_path, file_contents_path=None):
+def gather_uncommitted(meta_path, diff_path, file_contents_path):
     # Get file list from both staged and unstaged
     stat_unstaged = run(['git', 'diff', '--stat'])
     stat_staged = run(['git', 'diff', '--cached', '--stat'])
@@ -236,15 +236,14 @@ def gather_uncommitted(meta_path, diff_path, file_contents_path=None):
     with open(diff_path, 'w') as f:
         f.write(combined_diff)
 
-    if file_contents_path:
-        contents = get_file_contents(kept, before_ref='HEAD', read_disk=True)
-        with open(file_contents_path, 'w') as f:
-            json.dump(contents, f, ensure_ascii=False)
+    contents = get_file_contents(kept, before_ref='HEAD', read_disk=True)
+    with open(file_contents_path, 'w') as f:
+        json.dump(contents, f, ensure_ascii=False)
 
     print(f"{len(kept)} files, +{meta['stats']['added']}/-{meta['stats']['deleted']}, {len(skipped)} skipped")
 
 
-def gather_committed(base, meta_path, diff_path, file_contents_path=None):
+def gather_committed(base, meta_path, diff_path, file_contents_path):
     # Verify base ref exists
     check = subprocess.run(['git', 'rev-parse', '--verify', base], capture_output=True, text=True)
     if check.returncode != 0:
@@ -310,10 +309,9 @@ def gather_committed(base, meta_path, diff_path, file_contents_path=None):
     with open(diff_path, 'w') as f:
         f.write(diff)
 
-    if file_contents_path:
-        contents = get_file_contents(kept, before_ref=base, read_disk=False)
-        with open(file_contents_path, 'w') as f:
-            json.dump(contents, f, ensure_ascii=False)
+    contents = get_file_contents(kept, before_ref=base, read_disk=False)
+    with open(file_contents_path, 'w') as f:
+        json.dump(contents, f, ensure_ascii=False)
 
     print(f"{len(kept)} files, +{added}/-{deleted}, {n_commits} commits, {len(skipped)} skipped")
 
@@ -323,14 +321,15 @@ if __name__ == '__main__':
     parser.add_argument('mode', help='uncommitted, branch, or a base ref')
     parser.add_argument('--meta', required=True, help='output path for metadata JSON')
     parser.add_argument('--diff', required=True, help='output path for raw diff')
-    parser.add_argument('--file-contents', dest='file_contents', help='output path for full file contents JSON')
     args = parser.parse_args()
 
+    file_contents_path = os.path.join(os.path.dirname(args.meta), 'file-contents.json')
+
     if args.mode == 'uncommitted':
-        gather_uncommitted(args.meta, args.diff, args.file_contents)
+        gather_uncommitted(args.meta, args.diff, file_contents_path)
     elif args.mode == 'branch':
         base = detect_default_branch()
         print(f"Base branch: {base}")
-        gather_committed(base, args.meta, args.diff, args.file_contents)
+        gather_committed(base, args.meta, args.diff, file_contents_path)
     else:
-        gather_committed(args.mode, args.meta, args.diff, args.file_contents)
+        gather_committed(args.mode, args.meta, args.diff, file_contents_path)
