@@ -1644,10 +1644,19 @@ a.bc-path { text-decoration: none; }
     });
   }
 
-  // Scroll both diff panels to a given line number
-  function scrollPanelsToLine(sectionId, lineNum) {
-    ['diff-before-', 'diff-after-'].forEach(function(prefix) {
-      var pid = prefix + sectionId;
+  // Return [beforeStartLine, afterStartLine] derived from minimap changed-line sets.
+  // Falls back to `fallback` for whichever panel has no changed lines recorded.
+  function firstChangedLines(mmData, fallback) {
+    var beforeStart = mmData.r && mmData.r.length ? Math.min.apply(null, mmData.r) : fallback;
+    var afterStart  = mmData.a && mmData.a.length ? Math.min.apply(null, mmData.a)  : fallback;
+    return [beforeStart, afterStart];
+  }
+
+  // Scroll diff panels to their respective start lines (before and after coordinates differ).
+  function scrollPanelsToLine(sectionId, beforeLineNum, afterLineNum) {
+    [['diff-before-', beforeLineNum], ['diff-after-', afterLineNum]].forEach(function(pair) {
+      var pid = pair[0] + sectionId;
+      var lineNum = pair[1];
       var panel = document.getElementById(pid);
       if (!panel) return;
       panel.scrollTop = Math.max(0, (lineNum - 1) * LINE_HEIGHT);
@@ -1764,7 +1773,9 @@ a.bc-path { text-decoration: none; }
       _panelData['diff-before-' + sid] = { lines: fc.before_lines, changedSet: removedLines, changedClass: 'removed', hlLines: null };
       _panelData['diff-after-'  + sid] = { lines: fc.after_lines,  changedSet: addedLines,   changedClass: 'added',   hlLines: null };
     }
-    scrollPanelsToLine(sid, parseInt(container.dataset.startLine, 10) || 1);
+    var fallback = parseInt(container.dataset.startLine, 10) || 1;
+    var starts = firstChangedLines(mmData, fallback);
+    scrollPanelsToLine(sid, starts[0], starts[1]);
     drawMinimap(sid);
     highlightPanels(container);
   }, true);
@@ -1774,7 +1785,12 @@ a.bc-path { text-decoration: none; }
     var btn = e.target.closest('.btn-jump-start');
     if (!btn) return;
     e.stopPropagation();
-    scrollPanelsToLine(btn.dataset.sectionId, parseInt(btn.dataset.startLine, 10) || 1);
+    var sid = btn.dataset.sectionId;
+    var canvas = document.querySelector('#minimap-' + sid + ' .diff-minimap-canvas');
+    var mmData = canvas ? JSON.parse(canvas.dataset.minimap) : {r: [], a: []};
+    var fallback = parseInt(btn.dataset.startLine, 10) || 1;
+    var starts = firstChangedLines(mmData, fallback);
+    scrollPanelsToLine(sid, starts[0], starts[1]);
   });
 
   // Minimap click — jump both panels to clicked position
