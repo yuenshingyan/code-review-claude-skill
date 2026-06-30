@@ -11,21 +11,44 @@ Steps:
 4. Write output HTML
 """
 
+from __future__ import annotations
+
 import sys
 import os
 import json
+from typing import Any
 
 
-def embed_diff_metadata(review, parsed):
-    """Write absPath and startLine into each section.
+def embed_diff_metadata(
+    review: dict[str, Any],
+    parsed: list[dict[str, Any]],
+) -> None:
+    """Enrich each review section with absolute file path and start line.
 
-    absPath: absolute path to the file (after-side for new/modified, before-side for deleted).
-    startLine: the hunk's old_start (or new_start for new files) where the change begins —
-               used by the 'Jump to line' button in the HTML.
+    Builds an index of hunks keyed by ``(file_path, old_start)`` for O(1)
+    lookup, then walks every section in the review and writes ``absPath``
+    (absolute filesystem path) and ``startLine`` (the hunk line number
+    used by the "Jump to line" button in the HTML viewer).
+
+    Parameters
+    ----------
+    review : dict[str, Any]
+        Parsed review JSON.  Must contain a ``sections`` key mapping tab
+        names to lists of section dicts.  Modified **in place**.
+    parsed : list[dict[str, Any]]
+        Parsed diff entries (output of ``parse_diff``), each with ``file``
+        and ``hunks`` keys.  See ``FileEntry`` / ``Hunk`` in
+        ``parse_diff.py`` for the canonical structure.
+
+    Notes
+    -----
+    Mutates *review* in place; does not return a value.  ``absPath`` is
+    constructed from the current working directory via ``os.getcwd()``.
     """
-    hunk_index = {}
+    # Build hunk index keyed by (file_path, old_start) for O(1) lookup
+    hunk_index: dict[str, dict[int, dict[str, Any]]] = {}
     for entry in parsed:
-        file_path = entry['file']
+        file_path: str = entry['file']
         hunk_index[file_path] = {h['old_start']: h for h in entry['hunks']}
 
     repo_root = os.getcwd()
@@ -35,12 +58,12 @@ def embed_diff_metadata(review, parsed):
             file_path = section['file']
             section['absPath'] = os.path.join(repo_root, file_path)
 
-            line_numbers = section.get('lines', [])
-            file_hunks = hunk_index.get(file_path, {})
-            status = section.get('status', 'modified')
+            line_numbers: list[int] = section.get('lines', [])
+            file_hunks: dict[int, dict[str, Any]] = hunk_index.get(file_path, {})
+            status: str = section.get('status', 'modified')
 
             if status == 'new':
-                # new files have no old_start; find hunk by new_start
+                # New files have no old_start; locate hunk by new_start instead
                 all_hunks = list(file_hunks.values())
                 if all_hunks:
                     section['startLine'] = all_hunks[0].get('new_start', 1)
@@ -50,12 +73,30 @@ def embed_diff_metadata(review, parsed):
                 if hunk:
                     section['startLine'] = hunk['old_start']
             elif file_hunks:
-                # no lines specified — use first hunk
+                # No lines specified — default to the first hunk
                 first_hunk = next(iter(file_hunks.values()))
                 section['startLine'] = first_hunk['old_start']
 
 
-def validate(review):
+def validate(review: dict[str, Any]) -> int:
+    """Validate that every review section has an ``absPath`` set.
+
+    Iterates over all sections and prints a diagnostic for each one
+    missing an absolute path.  Intended to be called after
+    ``embed_diff_metadata`` and before ``inject``.
+
+    Parameters
+    ----------
+    review : dict[str, Any]
+        Review JSON with sections already processed by
+        ``embed_diff_metadata``.
+
+    Returns
+    -------
+    int
+        Number of sections missing an ``absPath``.  Zero means all
+        sections are valid and ready for injection.
+    """
     total = sum(len(e) for e in review['sections'].values())
     missing = 0
     for tab, entries in review['sections'].items():
@@ -69,20 +110,52 @@ def validate(review):
     return missing
 
 
-DEFAULT_PLACEHOLDER = '{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{}}'
-HUNKS_PLACEHOLDER = '<script id="hunks-data" type="application/json">[]</script>'
-FILE_CONTENTS_PLACEHOLDER = '<script id="file-contents-data" type="application/json">[]</script>'
+DEFAULT_PLACEHOLDER: str = '{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{}}'
+HUNKS_PLACEHOLDER: str = '<script id="hunks-data" type="application/json">[]</script>'
+FILE_CONTENTS_PLACEHOLDER: str = '<script id="file-contents-data" type="application/json">[]</script>'
 
 
-def inject(review, parsed, file_contents, template_path, output_path):
+def inject(
+    review: dict[str, Any],
+    parsed: list[dict[str, Any]],
+    file_contents: list[dict[str, Any]],
+    template_path: str,
+    output_path: str,
+) -> bool:
+    """Inject review data, hunks, and file contents into the HTML template.
+
+    Reads the template HTML, replaces placeholder ``<script>`` tags with
+    serialised JSON data, and writes the final self-contained review page.
+
+    Parameters
+    ----------
+    review : dict[str, Any]
+        Fully enriched review JSON (with ``absPath`` / ``startLine``).
+    parsed : list[dict[str, Any]]
+        Parsed diff hunks to embed in the ``hunks-data`` script tag.
+    file_contents : list[dict[str, Any]]
+        Before/after file line arrays for the inline source viewer.
+    template_path : str
+        Path to the HTML template file containing placeholder script tags.
+    output_path : str
+        Path where the final HTML review page will be written.
+
+    Returns
+    -------
+    bool
+        ``True`` if injection succeeded, ``False`` if the placeholder was
+        not found in the template (indicating a template mismatch).
+    """
     with open(template_path, encoding='utf-8') as f:
         template = f.read()
 
     json_str = json.dumps(review, ensure_ascii=False)
+    # Placeholder must exactly match the template's initial script tag content
     placeholder = f'<script id="review-data" type="application/json">{DEFAULT_PLACEHOLDER}</script>'
     replacement = f'<script id="review-data" type="application/json">{json_str}</script>'
 
     result = template.replace(placeholder, replacement)
+    # Safety check — if the review JSON is absent, the placeholder didn't match
     if json_str not in result:
         print("ERROR: template injection failed — placeholder not found")
         return False
