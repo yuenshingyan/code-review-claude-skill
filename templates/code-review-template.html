@@ -802,8 +802,12 @@ a.bc-path { text-decoration: none; }
     var fileContent = fileContentsByFile[s.file];
     if (!fileContent) return '';
     var fileHunks = hunksByFile[s.file] || [];
+    var relevantStarts = new Set(s.lines || []);
+    var relevantHunks = relevantStarts.size === 0 ? fileHunks : fileHunks.filter(function(h) {
+      return s.status === 'new' ? relevantStarts.has(h.new_start) : relevantStarts.has(h.old_start);
+    });
     var removedLines = {}, addedLines = {};
-    fileHunks.forEach(function(h) {
+    relevantHunks.forEach(function(h) {
       (h.before || []).forEach(function(l) { if (l.type === 'removed') removedLines[l.line] = true; });
       (h.after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
     });
