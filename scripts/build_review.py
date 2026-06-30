@@ -72,6 +72,16 @@ def embed_diff_metadata(
                 hunk = file_hunks.get(first_ln)
                 if hunk:
                     section['startLine'] = hunk['old_start']
+                    # If this hunk only deletes (no additions), also include the
+                    # next hunk so the After panel can show the replacement code.
+                    has_additions = any(l['type'] == 'added' for l in hunk.get('after', []))
+                    if not has_additions and hunk.get('before'):
+                        sorted_starts = sorted(file_hunks)
+                        idx = sorted_starts.index(first_ln)
+                        if idx + 1 < len(sorted_starts):
+                            next_start = sorted_starts[idx + 1]
+                            if next_start not in line_numbers:
+                                section['lines'] = list(line_numbers) + [next_start]
             elif file_hunks:
                 # No lines specified — default to the first hunk
                 first_hunk = next(iter(file_hunks.values()))
