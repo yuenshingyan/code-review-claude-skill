@@ -168,7 +168,8 @@ Write as much as needed to make each field genuinely useful to someone reading t
 - **`how`:** Mandatory for non-trivial changes. Describe approach and tradeoffs, not syntax.
 - **`when`:** Mandatory for non-trivial changes. Name runtime conditions, user actions, data states.
 - **`where`:** Mandatory for non-trivial changes. Map the blast radius — downstream files, APIs, consumers.
-- **Rich text:** `breakingDetail`, `note`, `why`, `how`, `when`, `where` may contain `<code>`, `<strong>`, `<em>`. No other HTML.
+- **Rich text:** `breakingDetail`, `note`, `why`, `how`, `when`, `where` may contain `<code>`, `<strong>`, `<em>`, and `<br>`. No other HTML.
+- **Numbered lists:** When a field contains a numbered list (e.g. "1. … 2. … 3. …"), place a `<br>` before each item number so each item renders on its own line. Example: `"First sentence of context.<br>1. Point one.<br>2. Point two.<br>3. Point three."`
 
 ### Content quality rules
 
