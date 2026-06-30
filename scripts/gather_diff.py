@@ -18,28 +18,79 @@ Outputs:
 Exit code 0 on success, 1 on error.
 """
 
+from __future__ import annotations
+
 import sys
 import subprocess
 import json
 import argparse
 import os
+from typing import Any, TypedDict
 
-SKIP_FILENAMES = {
+
+class CommitInfo(TypedDict):
+    """Single commit entry from git log."""
+
+    hash: str
+    message: str
+    author: str
+    date: str
+
+
+class SkippedFile(TypedDict):
+    """File excluded from the review diff with the reason for exclusion."""
+
+    file: str
+    reason: str
+
+
+class FileContents(TypedDict):
+    """Before and after source lines for a changed file."""
+
+    file: str
+    before_lines: list[str]
+    after_lines: list[str]
+
+
+# Lock files that bloat diffs without review value
+SKIP_FILENAMES: set[str] = {
     'Cargo.lock', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
     'Gemfile.lock', 'poetry.lock', 'composer.lock', 'go.sum',
     'flake.lock', 'Pipfile.lock',
 }
 
-SKIP_DIRS = {'vendor/', 'third_party/', 'node_modules/', '.git/'}
+# Vendored / third-party directories
+SKIP_DIRS: set[str] = {'vendor/', 'third_party/', 'node_modules/', '.git/'}
 
-SKIP_EXTENSIONS = {
+# Machine-generated file extensions
+SKIP_EXTENSIONS: set[str] = {
     '.pb.go', '.pb.rs', '_pb2.py', '.pb.h', '.pb.cc',
     '.generated.ts', '.generated.js',
     '.min.js', '.min.css',
 }
 
 
-def run(cmd, check=True):
+def run(cmd: list[str], check: bool = True) -> str:
+    """Execute a shell command and return its standard output.
+
+    Parameters
+    ----------
+    cmd : list[str]
+        Command and arguments to pass to ``subprocess.run``.
+    check : bool, optional
+        If ``True`` (default), print an error message to stderr and call
+        ``sys.exit(1)`` when the command exits with a non-zero return code.
+
+    Returns
+    -------
+    str
+        The captured standard output of the command.
+
+    Raises
+    ------
+    SystemExit
+        If *check* is ``True`` and the command fails (non-zero exit code).
+    """
     result = subprocess.run(cmd, capture_output=True, text=True)
     if check and result.returncode != 0:
         print(f"ERROR: {' '.join(cmd)}\n{result.stderr}", file=sys.stderr)
@@ -47,10 +98,28 @@ def run(cmd, check=True):
     return result.stdout
 
 
-def should_skip(filepath):
+def should_skip(filepath: str) -> str | None:
+    """Determine whether a file should be excluded from the review diff.
+
+    Checks the file against lock-file names, vendored directory prefixes,
+    and generated-code suffixes.
+
+    Parameters
+    ----------
+    filepath : str
+        Relative path of the changed file (as reported by ``git diff``).
+
+    Returns
+    -------
+    str or None
+        A human-readable reason string (e.g. ``"lock file"``,
+        ``"generated code"``) if the file should be skipped, or ``None``
+        if it should be kept.
+    """
     basename = os.path.basename(filepath)
     if basename in SKIP_FILENAMES:
         return "lock file"
+    # Check if path traverses a vendored or third-party directory
     for d in SKIP_DIRS:
         if filepath.startswith(d) or f'/{d}' in filepath:
             return f"vendored ({d.rstrip('/')})"
@@ -60,13 +129,26 @@ def should_skip(filepath):
     return None
 
 
-def detect_default_branch():
+def detect_default_branch() -> str:
+    """Auto-detect the repository's default branch name.
+
+    Tries ``git symbolic-ref refs/remotes/origin/HEAD`` first.  If that
+    fails (e.g. shallow clone or missing remote), falls back to probing
+    ``main`` then ``master``.  Returns ``"main"`` as a last resort.
+
+    Returns
+    -------
+    str
+        Name of the default branch (e.g. ``"main"`` or ``"master"``).
+    """
+    # Primary: resolve the symbolic HEAD ref on origin
     result = subprocess.run(
         ['git', 'symbolic-ref', 'refs/remotes/origin/HEAD'],
         capture_output=True, text=True
     )
     if result.returncode == 0:
         return result.stdout.strip().replace('refs/remotes/origin/', '')
+    # Fallback: probe common branch names directly
     for candidate in ['main', 'master']:
         check = subprocess.run(
             ['git', 'rev-parse', '--verify', candidate],
@@ -77,7 +159,23 @@ def detect_default_branch():
     return 'main'
 
 
-def parse_shortstat(text):
+def parse_shortstat(text: str) -> tuple[int, int, int]:
+    """Parse ``git diff --shortstat`` output into numeric counts.
+
+    Each comma-separated segment contains a keyword (``file``,
+    ``insertion``, ``deletion``) that identifies the stat type.
+
+    Parameters
+    ----------
+    text : str
+        Raw shortstat output, e.g.
+        ``" 3 files changed, 42 insertions(+), 7 deletions(-)"``.
+
+    Returns
+    -------
+    tuple[int, int, int]
+        ``(files_changed, lines_added, lines_deleted)``.
+    """
     files = 0
     added = 0
     deleted = 0
@@ -92,24 +190,38 @@ def parse_shortstat(text):
     return files, added, deleted
 
 
-def parse_stat_files(text):
-    """Extract file paths from git diff --stat output."""
-    files = []
+def parse_stat_files(text: str) -> list[str]:
+    """Extract file paths from ``git diff --stat`` output.
+
+    Parses each line of the stat table to recover file paths, handling
+    the rename syntax ``{old => new}`` by extracting only the new path.
+    Skips the summary line (``N files changed, ...``).
+
+    Parameters
+    ----------
+    text : str
+        Full output of ``git diff --stat``.
+
+    Returns
+    -------
+    list[str]
+        Relative file paths, one per changed file.
+    """
+    files: list[str] = []
     for line in text.strip().splitlines():
         line = line.strip()
         if not line or line.startswith(' '):
             continue
-        # Last line is the summary "N files changed, ..."
+        # Skip the summary line at the bottom of --stat output
         if 'changed' in line and ('insertion' in line or 'deletion' in line):
             continue
-        # Format: "path/to/file | N ++--" or "path/to/file (new)" etc.
-        # Also handles renames: "old => new"
+        # Format: "path/to/file | N ++--"
         parts = line.split('|')
         if len(parts) >= 2:
             path = parts[0].strip()
-            # Handle renames: "src/{old => new}/file.rs"
+            # Handle renames: "src/{old => new}/file.rs" — strip braces
+            # and keep only the new-side path
             if '=>' in path:
-                # Extract the new path
                 path = path.replace('{', '').replace('}', '')
                 parts2 = path.split('=>')
                 if len(parts2) == 2:
@@ -118,8 +230,24 @@ def parse_stat_files(text):
     return files
 
 
-def parse_log(text):
-    commits = []
+def parse_log(text: str) -> list[CommitInfo]:
+    """Parse ``git log`` output into structured commit records.
+
+    Expects the custom format ``%h %s|%an|%ad`` (pipe-delimited fields:
+    hash+message, author, date).
+
+    Parameters
+    ----------
+    text : str
+        Raw output of ``git log --format='%h %s|%an|%ad'``.
+
+    Returns
+    -------
+    list[CommitInfo]
+        One dict per commit with keys ``hash``, ``message``, ``author``,
+        ``date``.
+    """
+    commits: list[CommitInfo] = []
     for line in text.strip().splitlines():
         if not line.strip():
             continue
@@ -139,17 +267,58 @@ def parse_log(text):
     return commits
 
 
-def build_excludes(skipped_files):
-    """Build git pathspec excludes for skipped files."""
-    excludes = []
+def build_excludes(skipped_files: list[str]) -> list[str]:
+    """Build git pathspec exclude patterns for skipped files.
+
+    Parameters
+    ----------
+    skipped_files : list[str]
+        File paths to exclude from the diff.
+
+    Returns
+    -------
+    list[str]
+        Pathspec strings prefixed with ``:!`` suitable for appending
+        after ``--`` in a ``git diff`` command.
+    """
+    excludes: list[str] = []
     for filepath in skipped_files:
         excludes.append(f':!{filepath}')
     return excludes
 
 
-def get_file_contents(kept_files, before_ref, read_disk=False):
-    contents = []
+def get_file_contents(
+    kept_files: list[str],
+    before_ref: str,
+    read_disk: bool = False,
+) -> list[FileContents]:
+    """Retrieve before and after file contents for the changed files.
+
+    For each file, the "before" content is read from git at *before_ref*.
+    The "after" content is either read from ``HEAD`` (committed mode) or
+    from the working-tree disk (uncommitted mode, when *read_disk* is
+    ``True``).
+
+    Parameters
+    ----------
+    kept_files : list[str]
+        Relative paths of files to retrieve contents for.
+    before_ref : str
+        Git ref to read the "before" version from (e.g. ``"HEAD"`` or a
+        branch name).
+    read_disk : bool, optional
+        If ``True``, read the "after" version from the filesystem instead
+        of from ``HEAD``.  Used for uncommitted-changes mode.
+
+    Returns
+    -------
+    list[FileContents]
+        One entry per file with ``before_lines`` and ``after_lines`` as
+        lists of strings (no trailing newlines).
+    """
+    contents: list[FileContents] = []
     for filepath in kept_files:
+        # Retrieve the "before" snapshot from git's object store
         before_result = subprocess.run(
             ['git', 'show', f'{before_ref}:{filepath}'],
             capture_output=True, text=True, errors='replace'
@@ -157,12 +326,14 @@ def get_file_contents(kept_files, before_ref, read_disk=False):
         before_lines = before_result.stdout.splitlines() if before_result.returncode == 0 else []
 
         if read_disk:
+            # Uncommitted mode — read current working-tree state from disk
             try:
                 with open(filepath, encoding='utf-8', errors='replace') as f:
                     after_lines = f.read().splitlines()
             except FileNotFoundError:
                 after_lines = []
         else:
+            # Committed mode — read the HEAD version from git
             after_result = subprocess.run(
                 ['git', 'show', f'HEAD:{filepath}'],
                 capture_output=True, text=True, errors='replace'
@@ -173,16 +344,39 @@ def get_file_contents(kept_files, before_ref, read_disk=False):
     return contents
 
 
-def gather_uncommitted(meta_path, diff_path, file_contents_path):
-    # Get file list from both staged and unstaged
+def gather_uncommitted(
+    meta_path: str,
+    diff_path: str,
+    file_contents_path: str,
+) -> None:
+    """Gather staged and unstaged changes and write review artifacts.
+
+    Collects the combined unstaged + staged diff, computes stats (after
+    filtering out skipped files), detects binary files, and writes three
+    output files: metadata JSON, raw diff, and file-contents JSON.
+
+    Parameters
+    ----------
+    meta_path : str
+        Output path for the metadata JSON (scope, stats, skipped files).
+    diff_path : str
+        Output path for the raw unified diff text.
+    file_contents_path : str
+        Output path for the before/after file-contents JSON.
+
+    Raises
+    ------
+    SystemExit
+        If any underlying ``git`` command fails.
+    """
+    # Collect file lists from both staged and unstaged changes
     stat_unstaged = run(['git', 'diff', '--stat'])
     stat_staged = run(['git', 'diff', '--cached', '--stat'])
 
     all_files = set(parse_stat_files(stat_unstaged) + parse_stat_files(stat_staged))
 
-    # Classify skipped
-    skipped = []
-    kept = []
+    skipped: list[SkippedFile] = []
+    kept: list[str] = []
     for f in sorted(all_files):
         reason = should_skip(f)
         if reason:
@@ -192,7 +386,7 @@ def gather_uncommitted(meta_path, diff_path, file_contents_path):
 
     excludes = build_excludes([s['file'] for s in skipped])
 
-    # Get stats (after filtering)
+    # Compute stats after filtering — run shortstat for both unstaged and staged
     shortstat_args = ['git', 'diff', '--shortstat'] + (['--'] + excludes if excludes else [])
     shortstat_cached_args = ['git', 'diff', '--cached', '--shortstat'] + (['--'] + excludes if excludes else [])
     ss1 = run(shortstat_args)
@@ -200,16 +394,15 @@ def gather_uncommitted(meta_path, diff_path, file_contents_path):
     f1, a1, d1 = parse_shortstat(ss1) if ss1.strip() else (0, 0, 0)
     f2, a2, d2 = parse_shortstat(ss2) if ss2.strip() else (0, 0, 0)
 
-    # Get filtered diffs
+    # Collect filtered diffs from both staged and unstaged
     diff_args_base = ['--'] + excludes if excludes else []
     diff1 = run(['git', 'diff'] + diff_args_base)
     diff2 = run(['git', 'diff', '--cached'] + diff_args_base)
     combined_diff = diff1 + diff2
 
-    # Check for binary files in the diff
+    # Detect binary files by scanning for "Binary files" markers in the diff
     for line in combined_diff.splitlines():
         if line.startswith('Binary files'):
-            # Extract filename
             parts = line.split(' and ')
             if len(parts) >= 2:
                 bfile = parts[1].replace(' differ', '').strip()
@@ -218,7 +411,7 @@ def gather_uncommitted(meta_path, diff_path, file_contents_path):
                 if bfile not in [s['file'] for s in skipped]:
                     skipped.append({'file': bfile, 'reason': 'binary file'})
 
-    meta = {
+    meta: dict[str, Any] = {
         'scope': 'uncommitted changes',
         'stats': {
             'files': f1 + f2,
@@ -243,19 +436,49 @@ def gather_uncommitted(meta_path, diff_path, file_contents_path):
     print(f"{len(kept)} files, +{meta['stats']['added']}/-{meta['stats']['deleted']}, {len(skipped)} skipped")
 
 
-def gather_committed(base, meta_path, diff_path, file_contents_path):
-    # Verify base ref exists
+def gather_committed(
+    base: str,
+    meta_path: str,
+    diff_path: str,
+    file_contents_path: str,
+) -> None:
+    """Gather committed changes from a base ref to HEAD and write artifacts.
+
+    Verifies the base ref exists, collects the three-dot diff
+    (``base...HEAD``), retrieves commit history, filters out skipped
+    files and binary files, and writes metadata JSON, raw diff, and
+    file-contents JSON.
+
+    Parameters
+    ----------
+    base : str
+        Git ref to diff against (e.g. ``"main"``, a commit hash, or a
+        branch name).
+    meta_path : str
+        Output path for the metadata JSON.
+    diff_path : str
+        Output path for the raw unified diff.
+    file_contents_path : str
+        Output path for the before/after file-contents JSON.
+
+    Raises
+    ------
+    SystemExit
+        If *base* does not resolve to a valid ref, or if any ``git``
+        command fails.
+    """
+    # Fail early if the base ref is invalid to give a clear error message
     check = subprocess.run(['git', 'rev-parse', '--verify', base], capture_output=True, text=True)
     if check.returncode != 0:
         print(f"ERROR: ref '{base}' not found", file=sys.stderr)
         sys.exit(1)
 
-    # Get file list
+    # Use -M flag to enable rename detection in stat output
     stat = run(['git', 'diff', f'{base}...HEAD', '--stat', '-M'])
     all_files = parse_stat_files(stat)
 
-    skipped = []
-    kept = []
+    skipped: list[SkippedFile] = []
+    kept: list[str] = []
     for f in sorted(set(all_files)):
         reason = should_skip(f)
         if reason:
@@ -265,21 +488,19 @@ def gather_committed(base, meta_path, diff_path, file_contents_path):
 
     excludes = build_excludes([s['file'] for s in skipped])
 
-    # Stats
     shortstat_args = ['git', 'diff', f'{base}...HEAD', '--shortstat'] + (['--'] + excludes if excludes else [])
     ss = run(shortstat_args)
     files, added, deleted = parse_shortstat(ss) if ss.strip() else (0, 0, 0)
 
-    # Commits
+    # Retrieve commit log using pipe-delimited custom format
     log_out = run(['git', 'log', f'{base}..HEAD', '--oneline',
                    '--format=%h %s|%an|%ad', '--date=short'])
     commits = parse_log(log_out)
 
-    # Filtered diff
     diff_args = ['git', 'diff', f'{base}...HEAD', '-M'] + (['--'] + excludes if excludes else [])
     diff = run(diff_args)
 
-    # Check binary
+    # Detect binary files by scanning for "Binary files" markers
     for line in diff.splitlines():
         if line.startswith('Binary files'):
             parts = line.split(' and ')
@@ -291,7 +512,7 @@ def gather_committed(base, meta_path, diff_path, file_contents_path):
                     skipped.append({'file': bfile, 'reason': 'binary file'})
 
     n_commits = len(commits)
-    meta = {
+    meta: dict[str, Any] = {
         'scope': f'{base}..HEAD ({n_commits} commit{"s" if n_commits != 1 else ""})',
         'stats': {
             'files': files,
