@@ -5,7 +5,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-from build_review import _match_scope_blocks
+from scripts.build_review import _match_scope_blocks
 
 
 def make_block(name, kind, start, end, changed_lines=None):
