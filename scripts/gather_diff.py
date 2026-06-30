@@ -237,7 +237,7 @@ def gather_uncommitted(meta_path, diff_path, file_contents_path):
         f.write(combined_diff)
 
     contents = get_file_contents(kept, before_ref='HEAD', read_disk=True)
-    with open(file_contents_path, 'w') as f:
+    with open(file_contents_path, 'w', encoding='utf-8') as f:
         json.dump(contents, f, ensure_ascii=False)
 
     print(f"{len(kept)} files, +{meta['stats']['added']}/-{meta['stats']['deleted']}, {len(skipped)} skipped")
@@ -310,7 +310,7 @@ def gather_committed(base, meta_path, diff_path, file_contents_path):
         f.write(diff)
 
     contents = get_file_contents(kept, before_ref=base, read_disk=False)
-    with open(file_contents_path, 'w') as f:
+    with open(file_contents_path, 'w', encoding='utf-8') as f:
         json.dump(contents, f, ensure_ascii=False)
 
     print(f"{len(kept)} files, +{added}/-{deleted}, {n_commits} commits, {len(skipped)} skipped")
