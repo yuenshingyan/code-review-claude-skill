@@ -1464,7 +1464,12 @@ a.bc-path { text-decoration: none; }
     var fileCounts = {};
     sectionItems.forEach(function(i) { fileCounts[i.file] = (fileCounts[i.file] || 0) + 1; });
     var sortedFiles = Object.keys(fileCounts).sort(function(a, b) { return fileCounts[b] - fileCounts[a]; });
-    var LIMIT = 4;
+    var RESULTS_MAX_H = 450;
+    var HEADER_H = 28;
+    var ITEM_H = 26;
+    var numFiles = sortedFiles.length;
+    var availForItems = RESULTS_MAX_H - numFiles * HEADER_H;
+    var LIMIT = Math.max(4, Math.floor(availForItems / ITEM_H / (numFiles || 1)));
     // Pass 1: collect all currently-visible items to compute count for clamping
     var visibleItems = [];
     sortedFiles.forEach(function(file) {
