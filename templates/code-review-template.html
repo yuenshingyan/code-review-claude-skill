@@ -1629,9 +1629,9 @@ a.bc-path { text-decoration: none; }
       if (!p || p.scrollHeight <= p.clientHeight) return;
       var vpH = Math.max(8, (p.clientHeight / p.scrollHeight) * H);
       var vpTop = (p.scrollTop / (p.scrollHeight - p.clientHeight)) * (H - vpH);
-      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
       ctx.fillRect(side.x, vpTop, side.w, vpH);
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
       ctx.lineWidth = 1;
       ctx.strokeRect(side.x + 0.5, vpTop + 0.5, side.w - 1, vpH - 1);
     });
