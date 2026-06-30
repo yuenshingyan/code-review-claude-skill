@@ -1618,17 +1618,21 @@ a.bc-path { text-decoration: none; }
       var y = data.at > 1 ? (n - 1) / (data.at - 1) * H : 0;
       ctx.fillRect(half + 1, y, half - 3, 2);
     });
-    // Viewport indicator
-    var panel = document.getElementById('diff-before-' + sectionId);
-    if (panel && panel.scrollHeight > panel.clientHeight) {
-      var vpH = Math.max(8, (panel.clientHeight / panel.scrollHeight) * H);
-      var vpTop = (panel.scrollTop / (panel.scrollHeight - panel.clientHeight)) * (H - vpH);
+    // Viewport indicator — separate for each half so Before/After track their own line counts
+    [
+      { prefix: 'diff-before-', x: 0, w: half },
+      { prefix: 'diff-after-',  x: half, w: W - half },
+    ].forEach(function(side) {
+      var p = document.getElementById(side.prefix + sectionId);
+      if (!p || p.scrollHeight <= p.clientHeight) return;
+      var vpH = Math.max(8, (p.clientHeight / p.scrollHeight) * H);
+      var vpTop = (p.scrollTop / (p.scrollHeight - p.clientHeight)) * (H - vpH);
       ctx.fillStyle = 'rgba(255,255,255,0.07)';
-      ctx.fillRect(0, vpTop, W, vpH);
+      ctx.fillRect(side.x, vpTop, side.w, vpH);
       ctx.strokeStyle = 'rgba(255,255,255,0.15)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(0.5, vpTop + 0.5, W - 1, vpH - 1);
-    }
+      ctx.strokeRect(side.x + 0.5, vpTop + 0.5, side.w - 1, vpH - 1);
+    });
   }
 
   // Scroll both diff panels to a given line number
