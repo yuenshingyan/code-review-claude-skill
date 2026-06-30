@@ -6,14 +6,14 @@ Usage:
     git diff | python3 parse_diff.py > hunks.json
 
 Output: JSON array of file entries, each with hunks containing
-before/after code arrays matching the review template schema.
+changed line numbers keyed by old_start/new_start.
 """
 
 import sys
 import json
 import re
 
-HUNK_HEADER = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$')
+HUNK_HEADER = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 
 def parse_diff(lines):
     files = []
@@ -35,10 +35,6 @@ def parse_diff(lines):
             path = parts[1] if len(parts) > 1 else ''
             current_file = {
                 'file': path,
-                'old_file': None,
-                'status': 'modified',
-                'added': 0,
-                'removed': 0,
                 'hunks': [],
             }
             current_hunk = None
@@ -47,25 +43,15 @@ def parse_diff(lines):
         if not current_file:
             continue
 
-        # Detect renames
-        if line.startswith('rename from '):
-            current_file['old_file'] = line[len('rename from '):]
-            current_file['status'] = 'renamed'
-        elif line.startswith('rename to '):
+        if line.startswith('rename to '):
             current_file['file'] = line[len('rename to '):]
-
-        # Detect new/deleted
-        if line.startswith('--- /dev/null'):
-            current_file['status'] = 'new'
-        elif line.startswith('+++ /dev/null'):
-            current_file['status'] = 'deleted'
 
         # Skip other header lines
         if line.startswith('--- ') or line.startswith('+++ '):
             continue
         if line.startswith('index ') or line.startswith('new file') or line.startswith('deleted file'):
             continue
-        if line.startswith('similarity') or line.startswith('rename ') or line.startswith('old mode') or line.startswith('new mode'):
+        if line.startswith('similarity') or line.startswith('rename from ') or line.startswith('old mode') or line.startswith('new mode'):
             continue
 
         # Hunk header
@@ -75,13 +61,11 @@ def parse_diff(lines):
                 current_file['hunks'].append(current_hunk)
             old_line = int(m.group(1))
             new_line = int(m.group(3))
-            function_context = m.group(5).strip() if m.group(5) else ''
             current_hunk = {
                 'old_start': old_line,
                 'new_start': new_line,
-                'function_context': function_context,
-                'before': [],  # context + removed lines with old line numbers
-                'after': [],   # context + added lines with new line numbers
+                'before': [],
+                'after': [],
             }
             continue
 
@@ -90,35 +74,18 @@ def parse_diff(lines):
 
         # Diff content lines
         if line.startswith('-'):
-            text = line[1:]
             current_hunk['before'].append({
                 'line': old_line,
-                'text': text,
                 'type': 'removed',
             })
             old_line += 1
-            current_file['removed'] += 1
         elif line.startswith('+'):
-            text = line[1:]
             current_hunk['after'].append({
                 'line': new_line,
-                'text': text,
                 'type': 'added',
             })
             new_line += 1
-            current_file['added'] += 1
         elif line.startswith(' ') or line == '':
-            text = line[1:] if line.startswith(' ') else ''
-            current_hunk['before'].append({
-                'line': old_line,
-                'text': text,
-                'type': 'context',
-            })
-            current_hunk['after'].append({
-                'line': new_line,
-                'text': text,
-                'type': 'context',
-            })
             old_line += 1
             new_line += 1
         # Binary/no-newline markers
