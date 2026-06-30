@@ -813,6 +813,18 @@ a.bc-path { text-decoration: none; }
       (h.before || []).forEach(function(l) { if (l.type === 'removed') removedLines[l.line] = true; });
       (h.after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
     });
+    // If the selected hunks only contain deletions, the replacement additions are likely
+    // in the immediately-following hunk (common in refactors). Include it so the After
+    // panel can show the new code with highlights.
+    if (relevantHunks.length > 0 && Object.keys(removedLines).length > 0 && Object.keys(addedLines).length === 0) {
+      var lastOldStart = Math.max.apply(null, relevantHunks.map(function(h) { return h.old_start; }));
+      for (var _i = 0; _i < fileHunks.length; _i++) {
+        if (fileHunks[_i].old_start > lastOldStart) {
+          (fileHunks[_i].after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
+          break;
+        }
+      }
+    }
     var hasRemovals  = Object.keys(removedLines).length > 0;
     var hasAdditions = Object.keys(addedLines).length  > 0;
     var showBefore = !hasAdditions || hasRemovals;
