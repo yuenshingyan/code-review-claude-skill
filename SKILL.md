@@ -48,8 +48,7 @@ Run `gather_diff.py` with the mode chosen in Step 0:
 ```bash
 python3 ~/.claude/skills/code-review/scripts/gather_diff.py <mode> \
   --meta scratchpad/meta.json \
-  --diff scratchpad/raw.diff \
-  --file-contents scratchpad/file-contents.json
+  --diff scratchpad/raw.diff
 ```
 
 Where `<mode>` is `uncommitted`, `branch`, or a base ref string (e.g. `main`, `v1.2.0`).
