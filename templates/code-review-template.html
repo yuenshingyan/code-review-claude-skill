@@ -1433,12 +1433,6 @@ a.bc-path { text-decoration: none; }
   data.summary.forEach(function(s) {
     paletteItems.push({ id: s.id, file: s.file, desc: s.desc, tab: s.tab, type: 'section' });
   });
-  // Add tab actions
-  ['summary'].concat(tabOrder).forEach(function(t) {
-    var label = t === 'summary' ? 'Summary' : toLabel(t);
-    paletteItems.push({ id: '__tab__' + t, file: 'Go to ' + label + ' tab', desc: '', tab: t, type: 'tab' });
-  });
-
   function openPalette() {
     paletteOverlay.classList.add('open');
     paletteInput.value = '';
@@ -1458,7 +1452,6 @@ a.bc-path { text-decoration: none; }
       return item.file.toLowerCase().indexOf(q) !== -1 || item.desc.toLowerCase().indexOf(q) !== -1;
     });
     var sectionItems = filtered.filter(function(i) { return i.type === 'section'; });
-    var tabItems = filtered.filter(function(i) { return i.type === 'tab'; });
     var fileCounts = {};
     sectionItems.forEach(function(i) { fileCounts[i.file] = (fileCounts[i.file] || 0) + 1; });
     var sortedFiles = Object.keys(fileCounts).sort(function(a, b) { return fileCounts[b] - fileCounts[a]; });
@@ -1470,7 +1463,6 @@ a.bc-path { text-decoration: none; }
       var shown = paletteExpandedGroups[file] ? items : items.slice(0, LIMIT);
       shown.forEach(function(item) { visibleItems.push(item); });
     });
-    tabItems.forEach(function(item) { visibleItems.push(item); });
     paletteSelectedIdx = Math.min(paletteSelectedIdx, Math.max(0, visibleItems.length - 1));
     // Pass 2: render HTML
     var html = '';
@@ -1508,21 +1500,13 @@ a.bc-path { text-decoration: none; }
           '</div>';
       }
     });
-    tabItems.forEach(function(item) {
-      var cls = itemIdx === paletteSelectedIdx ? ' selected' : '';
-      itemIdx++;
-      html += '<div class="cmd-palette-item' + cls + '" data-action="tab" data-tab="' + esc(item.tab) + '">' +
-        '<span class="cpi-file">' + esc(item.file) + '</span></div>';
-    });
     paletteResults.innerHTML = html;
   }
 
   function executePaletteItem(el) {
     if (!el) return;
     var action = el.dataset.action;
-    if (action === 'tab') {
-      switchTab(el.dataset.tab);
-    } else if (action === 'section') {
+    if (action === 'section') {
       switchTab(el.dataset.tab);
       var target = root.querySelector('#' + el.dataset.id);
       if (target) {
