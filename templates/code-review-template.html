@@ -1826,24 +1826,12 @@ a.bc-path { text-decoration: none; }
       var y = data.bt > 1 ? (n - 1) / (data.bt - 1) * H : 0;
       ctx.fillRect(2, y, half - 3, 2);
     });
-    // Added ticks — right half
+    // Added ticks — right half, offset past the trace lane reserved at the half's own left edge
     ctx.fillStyle = 'rgba(74,222,128,0.75)';
     data.a.forEach(function(n) {
       var y = data.at > 1 ? (n - 1) / (data.at - 1) * H : 0;
-      ctx.fillRect(half + 1, y, half - 3, 2);
+      ctx.fillRect(half + 2, y, half - 3, 2);
     });
-    // Trace ticks — thin outer-edge lane, only for the section currently traced
-    if (activeTrace && activeTrace.sectionId === sectionId) {
-      ctx.fillStyle = 'rgba(74, 158, 255, 0.9)';
-      activeTrace.beforeLines.forEach(function(n) {
-        var y = data.bt > 1 ? (n - 1) / (data.bt - 1) * H : 0;
-        ctx.fillRect(0, y, 2, 2);
-      });
-      activeTrace.afterLines.forEach(function(n) {
-        var y = data.at > 1 ? (n - 1) / (data.at - 1) * H : 0;
-        ctx.fillRect(W - 2, y, 2, 2);
-      });
-    }
     // Viewport indicator — separate for each half so Before/After track their own line counts
     [
       { prefix: 'diff-before-', x: 0, w: half },
@@ -1859,6 +1847,22 @@ a.bc-path { text-decoration: none; }
       ctx.lineWidth = 1;
       ctx.strokeRect(side.x + 0.5, vpTop + 0.5, side.w - 1, vpH - 1);
     });
+    // Trace ticks — only for the section currently traced. Each half (before/after)
+    // is its own independent mini-map, so the tick sits at that half's own left edge:
+    // x=0 for before, x=half for after. Drawn after the viewport indicator so ticks
+    // stay visible even when the panel is scrolled and the viewport box would
+    // otherwise paint over them.
+    if (activeTrace && activeTrace.sectionId === sectionId) {
+      ctx.fillStyle = 'rgba(74, 158, 255, 0.9)';
+      activeTrace.beforeLines.forEach(function(n) {
+        var y = data.bt > 1 ? (n - 1) / (data.bt - 1) * H : 0;
+        ctx.fillRect(0, y, 2, 2);
+      });
+      activeTrace.afterLines.forEach(function(n) {
+        var y = data.at > 1 ? (n - 1) / (data.at - 1) * H : 0;
+        ctx.fillRect(half, y, 2, 2);
+      });
+    }
   }
 
   // Return [beforeStartLine, afterStartLine] derived from minimap changed-line sets.
