@@ -9,6 +9,7 @@
 - Add background-color styling to inline `<code>` references (file names, function/variable names) in WHY/HOW/WHEN annotations, breaking-change details, and notes
 - Add click-to-trace: click an identifier in a diff panel to highlight matching occurrences within that section's Before/After panels; click again or press Escape to clear
 - Restore Key Identifiers list per section (dropped by mistake in a since-reverted diff-editor-buttons change), now rendered above the diff panels and included in markdown export
+- Fix "Copy section as context" and "Export notes" markdown never including the actual before/after code, only WHY/HOW/WHEN prose; both now append fenced Before/After code blocks per changed region, clustering nearby hunks into one block and keeping far-apart hunks in the same section as separate blocks so unrelated unchanged code isn't dumped in between
 
 ## 1.0.0 — 2026-06-23
 
