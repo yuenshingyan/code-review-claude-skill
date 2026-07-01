@@ -1816,6 +1816,23 @@ a.bc-path { text-decoration: none; }
     applyHighlighting('diff-after-' + sid, fc.after_lines, lang);
   }
 
+  function highlightAnnotationCode() {
+    if (!window.hljs) return;
+    root.querySelectorAll('section.change').forEach(function(section) {
+      var s = findSectionData(section.id);
+      if (!s || !s.file) return;
+      var ext = s.file.split('.').pop().toLowerCase();
+      var lang = EXT_TO_LANG[ext];
+      if (!lang) return;
+      if (lang === 'rust') patchRustGrammarEscapes();
+      section.querySelectorAll('.annotation-text code').forEach(function(el) {
+        try {
+          el.innerHTML = hljs.highlight(el.textContent, { language: lang, ignoreIllegals: true }).value;
+        } catch (e) {}
+      });
+    });
+  }
+
   // Initialize virtual panels and auto-scroll when a section is opened
   root.addEventListener('toggle', function(e) {
     if (!e.target.open) return;
@@ -1958,6 +1975,8 @@ a.bc-path { text-decoration: none; }
     parseHash();
   }
   window.addEventListener('hashchange', parseHash);
+
+  highlightAnnotationCode();
 
 })();
 </script>
