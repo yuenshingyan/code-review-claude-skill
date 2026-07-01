@@ -74,7 +74,7 @@ def embed_diff_metadata(
                     section['startLine'] = hunk['old_start']
                     # If this hunk only deletes (no additions), also include the
                     # next hunk so the After panel can show the replacement code.
-                    has_additions = any(l['type'] == 'added' for l in hunk.get('after', []))
+                    has_additions = any(line['type'] == 'added' for line in hunk.get('after', []))
                     if not has_additions and hunk.get('before'):
                         sorted_starts = sorted(file_hunks)
                         idx = sorted_starts.index(first_ln)
@@ -120,9 +120,70 @@ def validate(review: dict[str, Any]) -> int:
     return missing
 
 
+def check_hunk_coverage(review: dict[str, Any], parsed: list[dict[str, Any]]) -> int:
+    """Warn about hunks that no section's ``lines`` array claims.
+
+    Cross-checks every hunk in *parsed* (``hunks.json``) against the union
+    of ``lines`` across all sections for that file. A hunk claimed by
+    neither a section's ``old_start`` nor ``new_start`` entries most often
+    means a section's ``why``/``how``/``when`` narrates behavior spanning
+    multiple hunks but only listed one of them (see the ``lines`` field
+    rule in ``SKILL.md``) — the un-listed hunk renders as plain,
+    unhighlighted context in the diff panel even though the prose
+    describes it.
+
+    Parameters
+    ----------
+    review : dict[str, Any]
+        Review JSON with sections already processed by
+        ``embed_diff_metadata``.
+    parsed : list[dict[str, Any]]
+        Parsed diff entries (output of ``parse_diff``).
+
+    Returns
+    -------
+    int
+        Number of orphaned hunks found. Non-fatal — this is a heuristic
+        (a file may legitimately have hunks with no sections at all, e.g.
+        if every hunk in it was deliberately left un-annotated), so
+        callers should warn rather than block the build.
+    """
+    claimed_by_file: dict[str, set[int]] = {}
+    for entries in review['sections'].values():
+        for section in entries:
+            claimed = claimed_by_file.setdefault(section['file'], set())
+            claimed.update(section.get('lines', []))
+
+    orphaned = 0
+    for entry in parsed:
+        file_path = entry['file']
+        claimed = claimed_by_file.get(file_path)
+        if not claimed:
+            continue  # file has no sections at all — out of scope for this check
+        for hunk in entry.get('hunks', []):
+            if hunk['old_start'] in claimed or hunk['new_start'] in claimed:
+                continue
+            print(f"  ORPHANED HUNK: {file_path} hunk at old_start={hunk['old_start']} is not "
+                  f"referenced by any section's `lines` — if a section's why/how/when narrates "
+                  f"this hunk's behavior, add {hunk['old_start']} to its `lines` array.")
+            orphaned += 1
+    if orphaned:
+        print(f"\n{orphaned} hunk(s) not covered by any section's `lines` (see warnings above).")
+    return orphaned
+
+
 DEFAULT_PLACEHOLDER: str = '{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{}}'
 HUNKS_PLACEHOLDER: str = '<script id="hunks-data" type="application/json">[]</script>'
 FILE_CONTENTS_PLACEHOLDER: str = '<script id="file-contents-data" type="application/json">[]</script>'
+
+
+def _escape_for_script_tag(json_str: str) -> str:
+    """Escape `</` so embedded source containing a literal `</script>` (e.g.
+    this very file's own placeholder constants, or any reviewed HTML/JS) can't
+    prematurely close the surrounding inline `<script>` tag. `\\/` parses back
+    to `/` in JSON, so this is a no-op for the data itself.
+    """
+    return json_str.replace('</', '<\\/')
 
 
 def inject(
@@ -159,7 +220,7 @@ def inject(
     with open(template_path, encoding='utf-8') as f:
         template = f.read()
 
-    json_str = json.dumps(review, ensure_ascii=False)
+    json_str = _escape_for_script_tag(json.dumps(review, ensure_ascii=False))
     # Placeholder must exactly match the template's initial script tag content
     placeholder = f'<script id="review-data" type="application/json">{DEFAULT_PLACEHOLDER}</script>'
     replacement = f'<script id="review-data" type="application/json">{json_str}</script>'
@@ -170,10 +231,10 @@ def inject(
         print("ERROR: template injection failed — placeholder not found")
         return False
 
-    hunks_str = json.dumps(parsed, ensure_ascii=False)
+    hunks_str = _escape_for_script_tag(json.dumps(parsed, ensure_ascii=False))
     result = result.replace(HUNKS_PLACEHOLDER, f'<script id="hunks-data" type="application/json">{hunks_str}</script>')
 
-    file_contents_str = json.dumps(file_contents, ensure_ascii=False)
+    file_contents_str = _escape_for_script_tag(json.dumps(file_contents, ensure_ascii=False))
     result = result.replace(FILE_CONTENTS_PLACEHOLDER, f'<script id="file-contents-data" type="application/json">{file_contents_str}</script>')
 
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -206,6 +267,8 @@ if __name__ == '__main__':
     if validate(review):
         print("\nFix missing paths before injecting.")
         sys.exit(1)
+
+    check_hunk_coverage(review, parsed)
 
     if not inject(review, parsed, file_contents, template_path, output_path):
         sys.exit(1)
