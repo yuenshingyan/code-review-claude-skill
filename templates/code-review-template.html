@@ -838,14 +838,18 @@ a.bc-path { text-decoration: none; }
     return html;
   }
 
+  function selectRelevantHunks(s, fileHunks) {
+    var relevantStarts = new Set(s.lines || []);
+    return relevantStarts.size === 0 ? fileHunks : fileHunks.filter(function(h) {
+      return s.status === 'new' ? relevantStarts.has(h.new_start) : relevantStarts.has(h.old_start);
+    });
+  }
+
   function buildDiffPanels(s) {
     var fileContent = fileContentsByFile[s.file];
     if (!fileContent) return '';
     var fileHunks = hunksByFile[s.file] || [];
-    var relevantStarts = new Set(s.lines || []);
-    var relevantHunks = relevantStarts.size === 0 ? fileHunks : fileHunks.filter(function(h) {
-      return s.status === 'new' ? relevantStarts.has(h.new_start) : relevantStarts.has(h.old_start);
-    });
+    var relevantHunks = selectRelevantHunks(s, fileHunks);
     var removedLines = {}, addedLines = {};
     relevantHunks.forEach(function(h) {
       (h.before || []).forEach(function(l) { if (l.type === 'removed') removedLines[l.line] = true; });
@@ -900,6 +904,72 @@ a.bc-path { text-decoration: none; }
         '</div>' : '') +
       minimap +
       '</div>';
+  }
+
+  function fileLang(filepath) {
+    var ext = filepath.split('.').pop().toLowerCase();
+    return EXT_TO_LANG[ext] || '';
+  }
+
+  // Groups marked line numbers into runs, merging any that are within `gap`
+  // lines of each other. Keeps a section whose hunks land far apart in the
+  // same file (e.g. lines 30 and 900) from producing one giant snippet that
+  // dumps everything in between as unchanged context.
+  function clusterLineNumbers(nums, gap) {
+    var sorted = nums.slice().sort(function(a, b) { return a - b; });
+    var clusters = [];
+    sorted.forEach(function(n) {
+      var last = clusters.length ? clusters[clusters.length - 1] : null;
+      if (last && n - last[last.length - 1] <= gap) last.push(n);
+      else clusters.push([n]);
+    });
+    return clusters;
+  }
+
+  function snippetBlocks(allLines, markedLines, marker) {
+    var nums = Object.keys(markedLines).map(Number);
+    if (!nums.length) return [];
+    return clusterLineNumbers(nums, 6).map(function(cluster) {
+      var from = Math.max(1, cluster[0] - 3);
+      var to = Math.min(allLines.length, cluster[cluster.length - 1] + 3);
+      var out = [];
+      for (var i = from; i <= to; i++) out.push((markedLines[i] ? marker : ' ') + ' ' + (allLines[i - 1] || ''));
+      return out.join('\n');
+    });
+  }
+
+  // Render a section's relevant before/after code as fenced markdown blocks,
+  // for the copy-to-clipboard and export-notes markdown paths.
+  function buildDiffSnippetMarkdown(s) {
+    var fc = fileContentsByFile[s.file];
+    if (!fc) return '';
+    var relevantHunks = selectRelevantHunks(s, hunksByFile[s.file] || []);
+    if (relevantHunks.length === 0) return '';
+    var removedLines = {}, addedLines = {};
+    relevantHunks.forEach(function(h) {
+      (h.before || []).forEach(function(l) { if (l.type === 'removed') removedLines[l.line] = true; });
+      (h.after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
+    });
+    // Same pure-deletion fallback as buildDiffPanels: borrow the next hunk's
+    // additions so a refactor's replacement code isn't left out entirely.
+    if (Object.keys(removedLines).length > 0 && Object.keys(addedLines).length === 0) {
+      var fileHunks = hunksByFile[s.file] || [];
+      var lastOldStart = Math.max.apply(null, relevantHunks.map(function(h) { return h.old_start; }));
+      for (var i = 0; i < fileHunks.length; i++) {
+        if (fileHunks[i].old_start > lastOldStart) {
+          (fileHunks[i].after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
+          break;
+        }
+      }
+    }
+    var lang = fileLang(s.file);
+    var fence = function(block) { return '```' + lang + '\n' + block + '\n```'; };
+    var parts = [];
+    var beforeBlocks = snippetBlocks(fc.before_lines, removedLines, '-');
+    var afterBlocks = snippetBlocks(fc.after_lines, addedLines, '+');
+    if (beforeBlocks.length > 0) parts.push('**Before:**\n' + beforeBlocks.map(fence).join('\n\n'));
+    if (afterBlocks.length > 0) parts.push('**After:**\n' + afterBlocks.map(fence).join('\n\n'));
+    return parts.join('\n\n');
   }
 
   // Build key identifiers list
@@ -1240,6 +1310,11 @@ a.bc-path { text-decoration: none; }
       s.identifiers.forEach(function(id) {
         lines.push('- `' + id.name + '` — ' + id.desc);
       });
+    }
+    var snippet = buildDiffSnippetMarkdown(s);
+    if (snippet) {
+      lines.push('');
+      lines.push(snippet);
     }
     return lines.join('\n');
   }
@@ -1676,6 +1751,20 @@ a.bc-path { text-decoration: none; }
         '<span class="diff-line-text">' + text + '</span></div>';
     }
     content.innerHTML = html;
+
+    // Safety net: maxLineCols() undercounts glyphs that paint wider than one
+    // monospace cell (emoji, CJK/East-Asian-wide chars). If what we just
+    // mounted paints wider than the declared width, grow the floor — but
+    // never shrink it — so a later virtualized swap-out can't collapse
+    // scrollWidth under the user's current scrollLeft.
+    if (content._widthPx === undefined) {
+      content._widthPx = content.getBoundingClientRect().width;
+    }
+    var neededPx = content.scrollWidth;
+    if (neededPx > content._widthPx) {
+      content._widthPx = neededPx;
+      content.style.width = neededPx + 'px';
+    }
   }
 
   // Click-to-trace identifier highlighting
@@ -2102,9 +2191,18 @@ a.bc-path { text-decoration: none; }
     var container = panel.closest('.diff-panels');
     if (!container) return;
     var siblings = container.querySelectorAll('.diff-panel');
+    // Only re-sync vertical position when the panel that actually fired the
+    // scroll event moved vertically. Before/After panels can have different
+    // scrollHeights, so one may clamp at its own bottom while the other keeps
+    // going; a scroll event triggered by pure horizontal movement must not
+    // drag the other panel's independently-settled scrollTop back to match.
+    var topChanged = panel._lastScrollTop !== panel.scrollTop;
+    panel._lastScrollTop = panel.scrollTop;
     _syncLock = true;
     siblings.forEach(function(p) {
-      if (p !== panel) { p.scrollTop = panel.scrollTop; p.scrollLeft = panel.scrollLeft; }
+      if (p === panel) return;
+      if (topChanged) { p.scrollTop = panel.scrollTop; p._lastScrollTop = p.scrollTop; }
+      p.scrollLeft = panel.scrollLeft;
     });
     _syncLock = false;
     siblings.forEach(function(p) { renderVisibleLines(p.id); });
