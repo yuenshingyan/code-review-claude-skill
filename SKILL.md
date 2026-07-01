@@ -159,7 +159,7 @@ Write as much as needed to make each field genuinely useful to someone reading t
 ### Field rules
 
 - **No `id` or `summary` needed.** The template derives both automatically.
-- **`lines`:** Array of `old_start` integers from `hunks.json` — one per hunk that belongs to this section. Read `hunks.json`, find the hunks for this file by matching `file` path, and list their `old_start` values. For new files (no "before" side) use the hunk's `new_start` instead. `build_review.py` uses the first value to resolve the starting line for the "Jump to line" button.
+- **`lines`:** Array of `old_start` integers from `hunks.json` — one per hunk that belongs to this section. Read `hunks.json`, find the hunks for this file by matching `file` path, and list their `old_start` values. For new files (no "before" side) use the hunk's `new_start` instead. `build_review.py` uses the first value to resolve the starting line for the "Jump to line" button. If this section's `why`/`how`/`when` narrates behavior that spans more than one hunk (e.g. a strip step and a separate trigger step implemented in non-adjacent code), list every one of those hunks' `old_start` values — not just the first. Any hunk left out of `lines` renders as plain, unhighlighted context in the diff panel even though the prose describes it.
 - **`commits` (top-level):** Newest-first. From `meta.json`. Empty array for uncommitted mode.
 - **`commits` (per-section):** Short hashes of commits touching this file. Omit for uncommitted mode.
 - **`related`:** Array of file path strings. Detect from: imports, caller→callee, same-commit co-changes, migration+schema pairs, test+implementation pairs. 1–3 links per section max. The template automatically groups related sections into a collapsible visual container — no extra markup needed.
@@ -173,7 +173,7 @@ Write as much as needed to make each field genuinely useful to someone reading t
 
 ### Content quality rules
 
-- **One section per logical change.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), emit one section per hunk — same `file` path, separate `desc`/`why`/`how`/`when`. If two hunks are conceptually connected, link them with the `related` field.
+- **One section per logical change.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), emit one section per hunk — same `file` path, separate `desc`/`why`/`how`/`when`. If two hunks are conceptually connected, link them with the `related` field. Exception: when bundling multiple hunks into one section gives the clearer narrative (e.g. a step and the separate code that triggers it), you may combine them — but `lines` must then include every hunk's `old_start`, or the un-listed hunk won't be highlighted in the diff panel.
 - `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - For deleted files: `after: null`.
 - For renamed files: include `oldFile`. Template shows "Renamed from …" automatically.
@@ -233,6 +233,23 @@ Write as much as needed to make each field genuinely useful to someone reading t
 
 For `status: "renamed"` → add `"oldFile": "<original path>"`.
 
+**One section spanning multiple hunks.** When a step and the separate code that triggers it belong together narratively, keep them as one section — but list every hunk's `old_start` in `lines`. Omitting one (e.g. only listing the strip step's hunk and not the trigger's) means the trigger's lines render unhighlighted in the diff panel even though `how`/`when` describe them. Example — one section, two hunks:
+
+```json
+{
+  "file": "src/pages/projects/settings_server.rs",
+  "status": "modified",
+  "desc": "Strip old owner from reviewer arrays and rebalance after ownership transfer",
+  "added": 14, "removed": 2,
+  "lines": [228, 260],
+  "why": "When the old owner lost review permission during transfer, their user ID remained in item reviewer arrays, leaving stale reviewer assignments that could never be completed.",
+  "how": "Uses <code>array_remove</code> to strip the old owner's ID from all item reviewer arrays in the project. If <code>auto_assign_reviewers</code> is enabled, triggers a post-commit rebalance to fill the gaps.",
+  "when": "During project ownership transfer when the old owner had review permission."
+}
+```
+
+`lines: [228, 260]` covers both the `array_remove` hunk at 228 and the separate rebalance-trigger hunk at 260 — leaving out 260 would highlight only the strip step, not the trigger.
+
 ## Step 4 — Build the review
 
 ```bash
@@ -244,11 +261,12 @@ python3 ~/.claude/skills/code-review/scripts/build_review.py \
   code-review.html
 ```
 
-The script resolves each section's absolute file path and starting line number, then injects the review JSON into the HTML template. If it exits 1, read the output to identify the issue:
+The script resolves each section's absolute file path and starting line number, then injects the review JSON into the HTML template. Always read the full command output, not just the exit code — it prints two kinds of diagnostics:
 
-- **NO ABS PATH** — the section's `lines` array is missing or the `file` path doesn't match any entry in `hunks.json`. Open `scratchpad/hunks.json`, find the correct file entry, and update `lines` with the right `old_start` (or `new_start` for new files) integer.
+- **NO ABS PATH** (blocks — exits 1) — the section's `lines` array is missing or the `file` path doesn't match any entry in `hunks.json`. Open `scratchpad/hunks.json`, find the correct file entry, and update `lines` with the right `old_start` (or `new_start` for new files) integer.
+- **ORPHANED HUNK** (non-blocking — exits 0) — a hunk that no section's `lines` array claims. This usually means a section's `why`/`how`/`when` narrates behavior spanning multiple hunks but only one hunk's start line was listed (see the `lines` field rule above). Add the missing `old_start`/`new_start` to the relevant section's `lines`.
 
-Fix the violations in `scratchpad/review.json` and re-run until exit 0.
+Fix every violation in `scratchpad/review.json` and re-run — exit 0 alone is not sufficient, since ORPHANED HUNK warnings don't affect the exit code. Only proceed to Step 5 once the output has no NO ABS PATH errors and no ORPHANED HUNK warnings.
 
 ## Step 5 — Report
 
