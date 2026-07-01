@@ -301,7 +301,7 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px 0 4px; }
 .why { color: #8892a4; font-style: italic; font-size: 12px; margin: 4px 0 12px; line-height: 1.55; }
 
-/* WHY/HOW/WHEN/WHERE annotation block */
+/* WHY/HOW/WHEN annotation block */
 .change-annotations { margin: 10px 0 12px; display: flex; flex-direction: column; gap: 0; }
 .annotation-row { display: flex; gap: 0; font-size: 12px; line-height: 1.55; border-bottom: 1px solid #1e242d; }
 .annotation-row:last-child { border-bottom: none; }
@@ -309,7 +309,6 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
 .annotation-label.lbl-why { color: #4a9eff; }
 .annotation-label.lbl-how { color: #a78bfa; }
 .annotation-label.lbl-when { color: #fbbf24; }
-.annotation-label.lbl-where { color: #f87171; }
 .annotation-text { color: #8892a4; padding: 5px 0; flex: 1; min-width: 0; }
 .note { color: #8892a4; font-size: 11px; margin: 8px 0; padding: 6px 10px; background: rgba(255,255,255,0.02); border: 1px solid #1e242d; border-radius: 3px; }
 .note strong { color: #fbbf24; }
@@ -391,7 +390,6 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
   .annotation-label.lbl-why { color: #0055cc; }
   .annotation-label.lbl-how { color: #7c3aed; }
   .annotation-label.lbl-when { color: #8a6d00; }
-  .annotation-label.lbl-where { color: #c83232; }
   .annotation-text { color: #555; }
   .annotation-text code, .breaking-detail code, .note code { color: #1a1a2e; background: #eee; }
   .key-ids li { color: #555; }
@@ -925,8 +923,8 @@ a.bc-path { text-decoration: none; }
       html += '<p class="breaking-detail">' + s.breakingDetail + '</p>';
     }
 
-    // WHY/HOW/WHEN/WHERE annotations
-    var annotations = ['why', 'how', 'when', 'where'];
+    // WHY/HOW/WHEN annotations
+    var annotations = ['why', 'how', 'when'];
     var hasAnnotations = annotations.some(function(a) { return s[a]; });
     if (hasAnnotations) {
       html += '<div class="change-annotations">';
@@ -1182,8 +1180,8 @@ a.bc-path { text-decoration: none; }
     lines.push('');
     if (s.absPath) lines.push('**File:** `' + s.absPath + (s.startLine ? ':' + s.startLine : '') + '`');
     lines.push('');
-    var annoLabels = { why: 'WHY', how: 'HOW', when: 'WHEN', where: 'WHERE' };
-    ['why', 'how', 'when', 'where'].forEach(function(a) {
+    var annoLabels = { why: 'WHY', how: 'HOW', when: 'WHEN' };
+    ['why', 'how', 'when'].forEach(function(a) {
       if (s[a]) lines.push('**' + annoLabels[a] + ':** ' + s[a].replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
     });
     return lines.join('\n');
