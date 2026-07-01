@@ -1933,15 +1933,18 @@ a.bc-path { text-decoration: none; }
     } catch (e) {}
   }
 
-  function applyHighlighting(panelId, lines, lang) {
+  function applyHighlighting(panelId, lines, lang, cacheKey, fc) {
     if (!window.hljs) return;
-    var highlighted;
-    try {
-      highlighted = hljs.highlight(lines.join('\n'), { language: lang, ignoreIllegals: true }).value;
-    } catch(e) { return; }
+    var hlLines = fc[cacheKey];
+    if (!hlLines) {
+      try {
+        var highlighted = hljs.highlight(lines.join('\n'), { language: lang, ignoreIllegals: true }).value;
+      } catch(e) { return; }
+      hlLines = fc[cacheKey] = splitHighlightedLines(highlighted);
+    }
     var data = _panelData[panelId];
     if (data) {
-      data.hlLines = splitHighlightedLines(highlighted);
+      data.hlLines = hlLines;
       // Invalidate range cache so the next renderVisibleLines always repaints with highlighted HTML
       var panel = document.getElementById(panelId);
       var content = panel && panel.querySelector('.diff-panel-content');
@@ -1951,8 +1954,6 @@ a.bc-path { text-decoration: none; }
   }
 
   function highlightPanels(container) {
-    if (container.dataset.highlighted) return;
-    container.dataset.highlighted = '1';
     var file = container.dataset.file || '';
     var ext = file.split('.').pop().toLowerCase();
     var lang = EXT_TO_LANG[ext];
@@ -1961,8 +1962,8 @@ a.bc-path { text-decoration: none; }
     var sid = container.dataset.sectionId;
     var fc = fileContentsByFile[file];
     if (!fc) return;
-    applyHighlighting('diff-before-' + sid, fc.before_lines, lang);
-    applyHighlighting('diff-after-' + sid, fc.after_lines, lang);
+    applyHighlighting('diff-before-' + sid, fc.before_lines, lang, '_hlBefore', fc);
+    applyHighlighting('diff-after-' + sid, fc.after_lines, lang, '_hlAfter', fc);
   }
 
   function highlightAnnotationCode() {
