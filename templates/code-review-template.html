@@ -297,6 +297,10 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 .diff-line.added .diff-line-num { color: rgba(74, 222, 128, 0.6); }
 .diff-line.removed .diff-line-num { color: rgba(248, 113, 113, 0.6); }
 .diff-line-text { flex: 1; min-width: 0; }
+.diff-line-text mark.var-trace {
+  background: rgba(74, 158, 255, 0.28); color: inherit; border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(74, 158, 255, 0.5); padding: 0;
+}
 
 h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px 0 4px; }
 .why { color: #8892a4; font-style: italic; font-size: 12px; margin: 4px 0 12px; line-height: 1.55; }
@@ -606,6 +610,7 @@ a.bc-path { text-decoration: none; }
   var MINIMAP_PX_PER_LINE = 4;
   var MINIMAP_MIN_HEIGHT = 40;
   var _panelData = {};
+  var activeTrace = null; // { sectionId, word } | null — click-to-trace identifier highlight
 
   var data = JSON.parse(document.getElementById('review-data').textContent);
   var rawHunks = JSON.parse(document.getElementById('hunks-data').textContent);
@@ -1387,6 +1392,9 @@ a.bc-path { text-decoration: none; }
         e.preventDefault();
         goToNextUnreviewed();
         break;
+      case 'Escape': // Clear an active variable trace
+        if (activeTrace) clearTrace();
+        break;
       case '/': // Open command palette
         e.preventDefault();
         openPalette();
@@ -1600,22 +1608,131 @@ a.bc-path { text-decoration: none; }
     var total = data.lines.length;
     var first = Math.max(0, Math.floor(scrollTop / LINE_HEIGHT) - OVERDRAW);
     var last  = Math.min(total - 1, Math.ceil((scrollTop + clientH) / LINE_HEIGHT) + OVERDRAW);
-    // Skip rebuild if the rendered window hasn't changed
-    if (content._first === first && content._last === last) return;
+    var traceWord = activeTraceWordFor(panelId);
+    // Skip rebuild if the rendered window and trace state haven't changed
+    if (content._first === first && content._last === last && content._traceWord === traceWord) return;
     content._first = first;
     content._last = last;
+    content._traceWord = traceWord;
     content.style.transform = 'translateY(' + (first * LINE_HEIGHT) + 'px)';
     var html = '';
     for (var i = first; i <= last; i++) {
       var n = i + 1;
       var cls = data.changedSet[n] ? data.changedClass : '';
       var text = data.hlLines ? (data.hlLines[i] || '') : esc(data.lines[i] || '');
+      if (traceWord) text = injectTraceMarks(text, traceWord);
       html += '<div class="diff-line ' + cls + '" data-line-num="' + n + '">' +
         '<span class="diff-line-num">' + n + '</span>' +
         '<span class="diff-line-text">' + text + '</span></div>';
     }
     content.innerHTML = html;
   }
+
+  // Click-to-trace identifier highlighting
+  function activeTraceWordFor(panelId) {
+    if (!activeTrace) return null;
+    var sid = activeTrace.sectionId;
+    if (panelId !== 'diff-before-' + sid && panelId !== 'diff-after-' + sid) return null;
+    return activeTrace.word;
+  }
+
+  function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  // Wraps whole-word matches of `word` in <mark class="var-trace">, walking the
+  // already-highlighted line HTML so tags/attributes are copied through untouched
+  // and only text runs between tags are matched. Never mutates the source string's
+  // owner (data.hlLines) — callers must treat this as a read-only render-time transform.
+  function injectTraceMarks(html, word) {
+    var re = new RegExp('(^|[^A-Za-z0-9_$])(' + escapeRegExp(word) + ')(?![A-Za-z0-9_$])', 'g');
+    var out = '', i = 0, n = html.length;
+    while (i < n) {
+      if (html[i] === '<') {
+        var end = html.indexOf('>', i);
+        if (end === -1) { out += html.slice(i); break; }
+        out += html.slice(i, end + 1);
+        i = end + 1;
+        continue;
+      }
+      var next = html.indexOf('<', i);
+      if (next === -1) next = n;
+      out += html.slice(i, next).replace(re, function(m, pre, w) {
+        return pre + '<mark class="var-trace">' + w + '</mark>';
+      });
+      i = next;
+    }
+    return out;
+  }
+
+  function forceRerenderTracePanels(sectionId) {
+    ['diff-before-', 'diff-after-'].forEach(function(prefix) {
+      var panelId = prefix + sectionId;
+      var panel = document.getElementById(panelId);
+      if (!panel) return;
+      var content = panel.querySelector('.diff-panel-content');
+      if (content) content._traceWord = undefined;
+      renderVisibleLines(panelId);
+    });
+  }
+
+  function setTrace(sectionId, word) {
+    var prevSectionId = activeTrace ? activeTrace.sectionId : null;
+    activeTrace = { sectionId: sectionId, word: word };
+    if (prevSectionId && prevSectionId !== sectionId) forceRerenderTracePanels(prevSectionId);
+    forceRerenderTracePanels(sectionId);
+  }
+
+  function clearTrace() {
+    if (!activeTrace) return;
+    var sid = activeTrace.sectionId;
+    activeTrace = null;
+    forceRerenderTracePanels(sid);
+  }
+
+  var IDENT_RE = /[A-Za-z0-9_$]/;
+
+  function wordAtPoint(x, y) {
+    var range, node, offset;
+    if (document.caretRangeFromPoint) {
+      range = document.caretRangeFromPoint(x, y);
+      if (!range) return null;
+      node = range.startContainer;
+      offset = range.startOffset;
+    } else if (document.caretPositionFromPoint) {
+      var pos = document.caretPositionFromPoint(x, y);
+      if (!pos) return null;
+      node = pos.offsetNode;
+      offset = pos.offset;
+    } else {
+      return null;
+    }
+    if (node.nodeType !== Node.TEXT_NODE) return null;
+    var text = node.textContent;
+    if (offset >= text.length || !IDENT_RE.test(text[offset])) {
+      if (offset > 0 && IDENT_RE.test(text[offset - 1])) offset -= 1;
+      else return null;
+    }
+    var start = offset, end = offset;
+    while (start > 0 && IDENT_RE.test(text[start - 1])) start--;
+    while (end < text.length && IDENT_RE.test(text[end])) end++;
+    var word = text.slice(start, end);
+    if (!word || /^[0-9]/.test(word)) return null;
+    return word;
+  }
+
+  root.addEventListener('click', function(e) {
+    var content = e.target.closest('.diff-panel-content');
+    if (!content) return;
+    var panelsContainer = content.closest('.diff-panels');
+    if (!panelsContainer) return;
+    var sectionId = panelsContainer.dataset.sectionId;
+    var word = wordAtPoint(e.clientX, e.clientY);
+    if (!word) return;
+    if (activeTrace && activeTrace.sectionId === sectionId && activeTrace.word === word) {
+      clearTrace();
+    } else {
+      setTrace(sectionId, word);
+    }
+  });
 
   // Shrink the minimap track to match how much content the file actually has,
   // instead of always stretching to the panel's full capped height — a short
