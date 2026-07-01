@@ -201,7 +201,7 @@ details summary::before {
 }
 details summary:hover::before { color: #8892a4; }
 details[open] summary::before { transform: rotate(90deg); }
-details > div, details > p, details > h4, details > ul, details > .related-changes, details > .breaking-detail, details > .note { padding: 0 12px; }
+details > div, details > p, details > h4, details > ul, details > .related-changes, details > .breaking-detail, details > .note, details > .key-ids { padding: 0 12px; }
 .file-name { color: #4a9eff; text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 
 .desc { color: #8892a4; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
@@ -317,6 +317,17 @@ h4.why-heading { color: #e2e8f0; font-size: 12px; font-weight: 600; margin: 12px
 .note { color: #8892a4; font-size: 11px; margin: 8px 0; padding: 6px 10px; background: rgba(255,255,255,0.02); border: 1px solid #1e242d; border-radius: 3px; }
 .note strong { color: #fbbf24; }
 .annotation-text code, .breaking-detail code, .note code {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  color: #e2e8f0; background: rgba(255,255,255,0.06);
+  padding: 1px 4px; border-radius: 2px;
+}
+
+/* Key identifiers */
+.key-ids { margin: 8px 0 12px; }
+.key-ids h5 { color: #4a5568; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px; }
+.key-ids ul { list-style: none; padding: 0; margin: 0; }
+.key-ids li { font-size: 12px; color: #8892a4; padding: 2px 0; line-height: 1.55; }
+.key-ids code {
   font-family: 'IBM Plex Mono', monospace; font-size: 11px;
   color: #e2e8f0; background: rgba(255,255,255,0.06);
   padding: 1px 4px; border-radius: 2px;
@@ -549,7 +560,7 @@ a.bc-path { text-decoration: none; }
 .change-group > section.change:nth-child(even) { background: rgba(0, 0, 0, 0.3); }
 .change-group > section.change:not(:last-of-type) { border-bottom: 1px solid #1e2430; }
 .change-group > section.change .related-changes { display: none; }
-.change-group > section.change details > div, details > p, details > h4, details > ul, details > .related-changes, details > .breaking-detail, details > .note { padding: 0 12px; }
+.change-group > section.change details > div, details > p, details > h4, details > ul, details > .related-changes, details > .breaking-detail, details > .note, details > .key-ids { padding: 0 12px; }
 .change-group.collapsed > section.change { display: none; }
 
 /* Review checklist pills */
@@ -873,6 +884,17 @@ a.bc-path { text-decoration: none; }
       '</div>';
   }
 
+  // Build key identifiers list
+  function buildKeyIds(s) {
+    if (!s.identifiers || s.identifiers.length === 0) return '';
+    var html = '<div class="key-ids"><h5>Key identifiers</h5><ul>';
+    s.identifiers.forEach(function(id) {
+      html += '<li><code>' + esc(id.name) + '</code> — ' + esc(id.desc) + '</li>';
+    });
+    html += '</ul></div>';
+    return html;
+  }
+
   // Build sections
   function buildSection(s) {
     var html = '<section class="change" id="' + esc(s.id) + '" data-search-file="' + esc(s.file).toLowerCase() + '" data-search-desc="' + esc(s.desc).toLowerCase() + '"><details><summary>';
@@ -944,6 +966,9 @@ a.bc-path { text-decoration: none; }
       });
       html += '</div>';
     }
+
+    // Key identifiers
+    html += buildKeyIds(s);
 
     // Inline before/after diff panels
     html += buildDiffPanels(s);
@@ -1191,6 +1216,13 @@ a.bc-path { text-decoration: none; }
     ['why', 'how', 'when'].forEach(function(a) {
       if (s[a]) lines.push('**' + annoLabels[a] + ':** ' + s[a].replace(/<code>/g, '`').replace(/<\/code>/g, '`').replace(/<[^>]+>/g, ''));
     });
+    if (s.identifiers && s.identifiers.length > 0) {
+      lines.push('');
+      lines.push('**Key identifiers:**');
+      s.identifiers.forEach(function(id) {
+        lines.push('- `' + id.name + '` — ' + id.desc);
+      });
+    }
     return lines.join('\n');
   }
 
