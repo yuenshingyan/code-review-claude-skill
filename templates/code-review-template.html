@@ -1674,11 +1674,30 @@ a.bc-path { text-decoration: none; }
     });
   }
 
+  function computeTraceLines(sectionId, word) {
+    var re = new RegExp('(^|[^A-Za-z0-9_$])(' + escapeRegExp(word) + ')(?![A-Za-z0-9_$])');
+    function scan(panelId) {
+      var pd = _panelData[panelId];
+      if (!pd) return [];
+      var out = [];
+      for (var i = 0; i < pd.lines.length; i++) {
+        if (re.test(pd.lines[i])) out.push(i + 1);
+      }
+      return out;
+    }
+    return { beforeLines: scan('diff-before-' + sectionId), afterLines: scan('diff-after-' + sectionId) };
+  }
+
   function setTrace(sectionId, word) {
     var prevSectionId = activeTrace ? activeTrace.sectionId : null;
-    activeTrace = { sectionId: sectionId, word: word };
-    if (prevSectionId && prevSectionId !== sectionId) forceRerenderTracePanels(prevSectionId);
+    var lines = computeTraceLines(sectionId, word);
+    activeTrace = { sectionId: sectionId, word: word, beforeLines: lines.beforeLines, afterLines: lines.afterLines };
+    if (prevSectionId && prevSectionId !== sectionId) {
+      forceRerenderTracePanels(prevSectionId);
+      drawMinimap(prevSectionId);
+    }
     forceRerenderTracePanels(sectionId);
+    drawMinimap(sectionId);
   }
 
   function clearTrace() {
@@ -1686,6 +1705,7 @@ a.bc-path { text-decoration: none; }
     var sid = activeTrace.sectionId;
     activeTrace = null;
     forceRerenderTracePanels(sid);
+    drawMinimap(sid);
   }
 
   var IDENT_RE = /[A-Za-z0-9_$]/;
@@ -1780,6 +1800,18 @@ a.bc-path { text-decoration: none; }
       var y = data.at > 1 ? (n - 1) / (data.at - 1) * H : 0;
       ctx.fillRect(half + 1, y, half - 3, 2);
     });
+    // Trace ticks — thin outer-edge lane, only for the section currently traced
+    if (activeTrace && activeTrace.sectionId === sectionId) {
+      ctx.fillStyle = 'rgba(74, 158, 255, 0.9)';
+      activeTrace.beforeLines.forEach(function(n) {
+        var y = data.bt > 1 ? (n - 1) / (data.bt - 1) * H : 0;
+        ctx.fillRect(0, y, 2, 2);
+      });
+      activeTrace.afterLines.forEach(function(n) {
+        var y = data.at > 1 ? (n - 1) / (data.at - 1) * H : 0;
+        ctx.fillRect(W - 2, y, 2, 2);
+      });
+    }
     // Viewport indicator — separate for each half so Before/After track their own line counts
     [
       { prefix: 'diff-before-', x: 0, w: half },
