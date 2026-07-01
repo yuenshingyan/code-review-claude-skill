@@ -190,44 +190,24 @@ def parse_shortstat(text: str) -> tuple[int, int, int]:
     return files, added, deleted
 
 
-def parse_stat_files(text: str) -> list[str]:
-    """Extract file paths from ``git diff --stat`` output.
+def parse_name_only(text: str) -> list[str]:
+    """Extract file paths from ``git diff --name-only`` output.
 
-    Parses each line of the stat table to recover file paths, handling
-    the rename syntax ``{old => new}`` by extracting only the new path.
-    Skips the summary line (``N files changed, ...``).
+    Unlike ``git diff --stat``, ``--name-only`` never truncates long or
+    deeply nested paths with a leading ``...``, so this is the safe way
+    to recover the authoritative list of changed files.
 
     Parameters
     ----------
     text : str
-        Full output of ``git diff --stat``.
+        Full output of ``git diff --name-only``.
 
     Returns
     -------
     list[str]
         Relative file paths, one per changed file.
     """
-    files: list[str] = []
-    for line in text.strip().splitlines():
-        line = line.strip()
-        if not line or line.startswith(' '):
-            continue
-        # Skip the summary line at the bottom of --stat output
-        if 'changed' in line and ('insertion' in line or 'deletion' in line):
-            continue
-        # Format: "path/to/file | N ++--"
-        parts = line.split('|')
-        if len(parts) >= 2:
-            path = parts[0].strip()
-            # Handle renames: "src/{old => new}/file.rs" — strip braces
-            # and keep only the new-side path
-            if '=>' in path:
-                path = path.replace('{', '').replace('}', '')
-                parts2 = path.split('=>')
-                if len(parts2) == 2:
-                    path = parts2[1].strip()
-            files.append(path)
-    return files
+    return [line.strip() for line in text.strip().splitlines() if line.strip()]
 
 
 def parse_log(text: str) -> list[CommitInfo]:
@@ -369,11 +349,14 @@ def gather_uncommitted(
     SystemExit
         If any underlying ``git`` command fails.
     """
-    # Collect file lists from both staged and unstaged changes
-    stat_unstaged = run(['git', 'diff', '--stat'])
-    stat_staged = run(['git', 'diff', '--cached', '--stat'])
+    # Collect file lists from both staged and unstaged changes. Use
+    # --name-only rather than --stat: --stat truncates long/deep paths
+    # with a leading "...", which would corrupt the file keys used to
+    # look up before/after contents below.
+    names_unstaged = run(['git', 'diff', '--name-only'])
+    names_staged = run(['git', 'diff', '--cached', '--name-only'])
 
-    all_files = set(parse_stat_files(stat_unstaged) + parse_stat_files(stat_staged))
+    all_files = set(parse_name_only(names_unstaged) + parse_name_only(names_staged))
 
     skipped: list[SkippedFile] = []
     kept: list[str] = []
@@ -473,9 +456,11 @@ def gather_committed(
         print(f"ERROR: ref '{base}' not found", file=sys.stderr)
         sys.exit(1)
 
-    # Use -M flag to enable rename detection in stat output
-    stat = run(['git', 'diff', f'{base}...HEAD', '--stat', '-M'])
-    all_files = parse_stat_files(stat)
+    # Use --name-only rather than --stat: --stat truncates long/deep paths
+    # with a leading "...", which would corrupt the file keys used to look
+    # up before/after contents below. -M enables rename detection.
+    names = run(['git', 'diff', f'{base}...HEAD', '--name-only', '-M'])
+    all_files = parse_name_only(names)
 
     skipped: list[SkippedFile] = []
     kept: list[str] = []
