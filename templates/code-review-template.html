@@ -278,7 +278,7 @@ p.context { color: #8892a4; font-size: 12px; margin: 8px 0 10px; line-height: 1.
 .diff-panel { overflow-x: auto; overflow-y: scroll; flex: 1; min-height: 0; min-width: 0; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
 .diff-panel-spacer { position: relative; }
 .diff-panel-content { position: absolute; top: 0; left: 0; will-change: transform; }
-.diff-minimap { width: 36px; background: #0a0d12; border: 1px solid #1e2430; border-radius: 4px; display: flex; flex-direction: column; cursor: pointer; overflow: hidden; }
+.diff-minimap { width: 36px; background: #0a0d12; border: 1px solid #1e2430; border-radius: 4px; display: flex; flex-direction: column; cursor: pointer; overflow: hidden; align-self: start; }
 .diff-minimap-header { padding: 4px 0; border-bottom: 1px solid #1e2430; flex-shrink: 0; }
 .diff-minimap-canvas { display: block; width: 100%; flex: 1; min-height: 0; }
 /* prevent hljs theme from overriding panel backgrounds */
@@ -603,6 +603,8 @@ a.bc-path { text-decoration: none; }
 (function() {
   var LINE_HEIGHT = 20;
   var OVERDRAW = 20;
+  var MINIMAP_PX_PER_LINE = 4;
+  var MINIMAP_MIN_HEIGHT = 40;
   var _panelData = {};
 
   var data = JSON.parse(document.getElementById('review-data').textContent);
@@ -1615,6 +1617,19 @@ a.bc-path { text-decoration: none; }
     content.innerHTML = html;
   }
 
+  // Shrink the minimap track to match how much content the file actually has,
+  // instead of always stretching to the panel's full capped height — a short
+  // file gets a short, compact minimap rather than an oversized viewport box.
+  function sizeMinimap(sectionId, mmData) {
+    var minimapEl = document.getElementById('minimap-' + sectionId);
+    var beforePanel = document.getElementById('diff-before-' + sectionId);
+    if (!minimapEl || !beforePanel) return;
+    var totalLines = Math.max(mmData.bt || 0, mmData.at || 0);
+    var maxTrack = beforePanel.clientHeight;
+    var desired = totalLines * MINIMAP_PX_PER_LINE;
+    minimapEl.style.height = Math.max(MINIMAP_MIN_HEIGHT, Math.min(desired, maxTrack)) + 'px';
+  }
+
   // Draw the shared minimap onto its canvas
   function drawMinimap(sectionId) {
     var minimap = document.getElementById('minimap-' + sectionId);
@@ -1746,6 +1761,29 @@ a.bc-path { text-decoration: none; }
     return lines;
   }
 
+  var _rustGrammarPatched = false;
+  function patchRustGrammarEscapes() {
+    if (_rustGrammarPatched) return;
+    _rustGrammarPatched = true;
+    try {
+      var rust = hljs.getLanguage('rust');
+      if (!rust) return;
+      // hljs's bundled Rust grammar's char-escape regex omits `\` and `"` as escapable
+      // characters, so it mis-parses '\\' and consumes the literal's closing quote,
+      // leaving the string span unclosed for the rest of the highlighted block.
+      (rust.contains || []).forEach(function(mode) {
+        if (mode.scope !== 'string' || !mode.variants) return;
+        mode.variants.forEach(function(v) {
+          (v.contains || []).forEach(function(c) {
+            if (c.scope === 'char.escape' && c.match) {
+              c.match = /\\(['"\\]|\w|x\w{2}|u\w{4}|U\w{8})/;
+            }
+          });
+        });
+      });
+    } catch (e) {}
+  }
+
   function applyHighlighting(panelId, lines, lang) {
     if (!window.hljs) return;
     var highlighted;
@@ -1770,6 +1808,7 @@ a.bc-path { text-decoration: none; }
     var ext = file.split('.').pop().toLowerCase();
     var lang = EXT_TO_LANG[ext];
     if (!lang) return;
+    if (lang === 'rust' && window.hljs) patchRustGrammarEscapes();
     var sid = container.dataset.sectionId;
     var fc = fileContentsByFile[file];
     if (!fc) return;
@@ -1797,6 +1836,7 @@ a.bc-path { text-decoration: none; }
     var fallback = parseInt(container.dataset.startLine, 10) || 1;
     var starts = firstChangedLines(mmData, fallback);
     scrollPanelsToLine(sid, starts[0], starts[1]);
+    sizeMinimap(sid, mmData);
     drawMinimap(sid);
     highlightPanels(container);
   }, true);
