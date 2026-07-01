@@ -623,6 +623,22 @@ a.bc-path { text-decoration: none; }
   var _panelData = {};
   var activeTrace = null; // { sectionId, word } | null — click-to-trace identifier highlight
 
+  // Max rendered column width across all lines, expanding tabs to 8-col stops
+  // (the browser's default tab-size for white-space:pre). Used to give diff
+  // panels a stable horizontal scroll width independent of which lines the
+  // virtual scroller currently has rendered.
+  function maxLineCols(lines) {
+    var max = 0;
+    for (var i = 0; i < lines.length; i++) {
+      var col = 0, line = lines[i];
+      for (var j = 0; j < line.length; j++) {
+        col += line[j] === '\t' ? 8 - (col % 8) : 1;
+      }
+      if (col > max) max = col;
+    }
+    return max;
+  }
+
   var data = JSON.parse(document.getElementById('review-data').textContent);
   var rawHunks = JSON.parse(document.getElementById('hunks-data').textContent);
   var hunksByFile = {};
@@ -854,6 +870,8 @@ a.bc-path { text-decoration: none; }
     var sid = esc(s.id);
     var beforeH = fileContent.before_lines.length * LINE_HEIGHT;
     var afterH  = fileContent.after_lines.length  * LINE_HEIGHT;
+    var beforeW = 'calc(62px + ' + (maxLineCols(fileContent.before_lines) + 2) + 'ch)';
+    var afterW  = 'calc(62px + ' + (maxLineCols(fileContent.after_lines)  + 2) + 'ch)';
     var mmData = JSON.stringify({
       r: Object.keys(removedLines).map(Number),
       a: Object.keys(addedLines).map(Number),
@@ -870,14 +888,14 @@ a.bc-path { text-decoration: none; }
         '<div class="diff-panel-wrap">' +
           '<div class="diff-panel-header">Before</div>' +
           '<div class="diff-panel" id="diff-before-' + sid + '">' +
-            '<div class="diff-panel-spacer" style="height:' + beforeH + 'px"><div class="diff-panel-content"></div></div>' +
+            '<div class="diff-panel-spacer" style="height:' + beforeH + 'px"><div class="diff-panel-content" style="width:' + beforeW + '"></div></div>' +
           '</div>' +
         '</div>' : '') +
       (showAfter ?
         '<div class="diff-panel-wrap">' +
           '<div class="diff-panel-header">After</div>' +
           '<div class="diff-panel" id="diff-after-' + sid + '">' +
-            '<div class="diff-panel-spacer" style="height:' + afterH + 'px"><div class="diff-panel-content"></div></div>' +
+            '<div class="diff-panel-spacer" style="height:' + afterH + 'px"><div class="diff-panel-content" style="width:' + afterW + '"></div></div>' +
           '</div>' +
         '</div>' : '') +
       minimap +
