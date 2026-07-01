@@ -96,7 +96,7 @@ Common starting points (not the only options):
 
 Aim for 2–5 tabs. Omit any tab key with zero entries.
 
-### WHY / HOW / WHEN / WHERE annotations
+### WHY / HOW / WHEN annotations
 
 Each section MUST include structured annotations explaining the change. These render as a labeled block in the template.
 
@@ -106,9 +106,7 @@ Each section MUST include structured annotations explaining the change. These re
 
 **WHEN** — Describe the runtime conditions, user actions, data states, or system configurations under which this code path activates. This helps maintainers know when to test it, when to suspect it during debugging, and which users or environments are affected. Include edge cases, error states, or concurrency scenarios where relevant. Name specific triggers (e.g. "on every authenticated HTTP request", "when the queue is empty", "only on first render"). Aim for 2–4 sentences.
 
-**WHERE** — Name the files, modules, components, APIs, hooks, or downstream systems that depend on, call, or are affected by this change. This maps the blast radius so reviewers and future maintainers know what else to check or update. Include both direct callers and indirect consumers — tests, configuration, documentation, and external contracts that may need to change. Aim for 2–4 sentences.
-
-Write as much as needed to make each field genuinely useful to someone reading this code cold in six months. Clarity trumps brevity. For trivially obvious changes (typo fixes, formatting, renames with self-evident names), a short `why` alone is sufficient — omit `how`/`when`/`where`. When a section covers a diff that mixes multiple unrelated concerns, open `why` with a one-sentence summary and break each concern into a numbered item with its own before/after/why narrative. Never write a single sentence where three would give the full picture.
+Write as much as needed to make each field genuinely useful to someone reading this code cold in six months. Clarity trumps brevity. For trivially obvious changes (typo fixes, formatting, renames with self-evident names), a short `why` alone is sufficient — omit `how`/`when`. When a section covers a diff that mixes multiple unrelated concerns, open `why` with a one-sentence summary and break each concern into a numbered item with its own before/after/why narrative. Never write a single sentence where three would give the full picture.
 
 ### JSON schema
 
@@ -148,8 +146,7 @@ Write as much as needed to make each field genuinely useful to someone reading t
         "note": "<optional 'Also in this diff' note — omit if not needed>",
         "why": "<root cause or motivation — as much prose as needed>",
         "how": "<approach and key technical decisions — as much prose as needed>",
-        "when": "<runtime conditions that activate this path — as much prose as needed>",
-        "where": "<files/systems affected — blast radius — as much prose as needed>"
+        "when": "<runtime conditions that activate this path — as much prose as needed>"
       }
     ]
   }
@@ -167,13 +164,12 @@ Write as much as needed to make each field genuinely useful to someone reading t
 - **`why`:** Mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - **`how`:** Mandatory for non-trivial changes. Describe approach and tradeoffs, not syntax.
 - **`when`:** Mandatory for non-trivial changes. Name runtime conditions, user actions, data states.
-- **`where`:** Mandatory for non-trivial changes. Map the blast radius — downstream files, APIs, consumers.
-- **Rich text:** `breakingDetail`, `note`, `why`, `how`, `when`, `where` may contain `<code>`, `<strong>`, `<em>`, and `<br>`. No other HTML.
+- **Rich text:** `breakingDetail`, `note`, `why`, `how`, `when` may contain `<code>`, `<strong>`, `<em>`, and `<br>`. No other HTML.
 - **Numbered lists:** When a field contains a numbered list (e.g. "1. … 2. … 3. …"), place a `<br>` before each item number so each item renders on its own line. Example: `"First sentence of context.<br>1. Point one.<br>2. Point two.<br>3. Point three."`
 
 ### Content quality rules
 
-- **One section per logical change.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), emit one section per hunk — same `file` path, separate `desc`/`why`/`how`/`when`/`where`. If two hunks are conceptually connected, link them with the `related` field.
+- **One section per logical change.** When a file's diff contains multiple separate hunks (non-adjacent `@@` sections), emit one section per hunk — same `file` path, separate `desc`/`why`/`how`/`when`. If two hunks are conceptually connected, link them with the `related` field.
 - `why` is mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - For deleted files: `after: null`.
 - For renamed files: include `oldFile`. Template shows "Renamed from …" automatically.
@@ -196,8 +192,7 @@ Write as much as needed to make each field genuinely useful to someone reading t
   "context": "This middleware intercepts every authenticated request and validates the JWT.",
   "why": "Users were getting logged out mid-session when their token expired during long form submissions.",
   "how": "Added a <code>RefreshConfig</code> parameter to <code>AuthMiddleware::new()</code> that enables transparent token refresh within a configurable grace period, avoiding forced re-authentication.",
-  "when": "Activates on every authenticated HTTP request when the JWT is expired but within the grace period. Affects all users with active sessions during token rotation.",
-  "where": "<code>src/auth/claims.rs</code> (RefreshConfig definition), <code>src/main.rs</code> (middleware construction), all integration tests that instantiate AuthMiddleware."
+  "when": "Activates on every authenticated HTTP request when the JWT is expired but within the grace period. Affects all users with active sessions during token rotation."
 }
 ```
 
@@ -213,8 +208,7 @@ Write as much as needed to make each field genuinely useful to someone reading t
     "lines": [20],
     "why": "Callers were passing raw IDs; the report needs email addresses.",
     "how": "Parses string IDs to i32, queries the Users table with <code>is_in</code> filter to batch-fetch matching user records.",
-    "when": "Every time <code>send_report()</code> is called with recipient IDs — triggered by scheduled reports and manual sends.",
-    "where": "<code>Users::Entity</code> (SeaORM model), <code>send_report()</code> callers in <code>src/report/scheduler.rs</code> and <code>src/api/reports.rs</code>."
+    "when": "Every time <code>send_report()</code> is called with recipient IDs — triggered by scheduled reports and manual sends."
   },
   {
     "file": "src/report/service.rs",
@@ -224,8 +218,7 @@ Write as much as needed to make each field genuinely useful to someone reading t
     "lines": [95],
     "why": "Sequential queries added ~600ms latency to report generation.",
     "how": "Replaced sequential <code>.await</code> calls with <code>tokio::try_join!</code> to run both queries concurrently. Short-circuits on first error to preserve existing error behavior.",
-    "when": "Every call to <code>gather_report_data()</code> — triggered by both scheduled and on-demand report generation.",
-    "where": "<code>query_new()</code> and <code>query_resolved()</code> in this file, <code>src/report/scheduler.rs</code> (caller)."
+    "when": "Every call to <code>gather_report_data()</code> — triggered by both scheduled and on-demand report generation."
   }
 ]
 ```
