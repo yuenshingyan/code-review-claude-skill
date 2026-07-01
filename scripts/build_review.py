@@ -172,6 +172,46 @@ def check_hunk_coverage(review: dict[str, Any], parsed: list[dict[str, Any]]) ->
     return orphaned
 
 
+def check_file_contents_coverage(
+    parsed: list[dict[str, Any]],
+    file_contents: list[dict[str, Any]],
+) -> int:
+    """Verify every file with hunks has a matching file-contents entry.
+
+    Cross-checks each file in *parsed* (``hunks.json``, whose paths come
+    straight from the diff's ``diff --git a/... b/...`` header and are never
+    truncated) against the ``file`` keys in *file_contents*
+    (``file-contents.json``). A mismatch — from a truncated path, an encoding
+    difference, or any other divergence between the two extraction paths —
+    means the template's ``fileContentsByFile[s.file]`` lookup misses and the
+    before/after diff panel renders blank for that file, so this is treated
+    as a blocking error rather than a soft warning.
+
+    Parameters
+    ----------
+    parsed : list[dict[str, Any]]
+        Parsed diff entries (output of ``parse_diff``).
+    file_contents : list[dict[str, Any]]
+        Before/after file-contents entries (``file-contents.json``).
+
+    Returns
+    -------
+    int
+        Number of files in *parsed* with no matching ``file_contents`` entry.
+    """
+    contents_files = {fc['file'] for fc in file_contents}
+    missing = 0
+    for entry in parsed:
+        file_path = entry['file']
+        if file_path not in contents_files:
+            print(f"  MISSING FILE CONTENTS: {file_path} has hunks but no matching entry in "
+                  f"file-contents.json — the diff panel for this file will render blank.")
+            missing += 1
+    if missing:
+        print(f"\n{missing} file(s) missing from file-contents.json.")
+    return missing
+
+
 DEFAULT_PLACEHOLDER: str = '{"title":"","projectName":"","date":"","scope":"","stats":{"files":0,"added":0,"deleted":0},"commits":[],"sections":{}}'
 HUNKS_PLACEHOLDER: str = '<script id="hunks-data" type="application/json">[]</script>'
 FILE_CONTENTS_PLACEHOLDER: str = '<script id="file-contents-data" type="application/json">[]</script>'
@@ -266,6 +306,10 @@ if __name__ == '__main__':
 
     if validate(review):
         print("\nFix missing paths before injecting.")
+        sys.exit(1)
+
+    if check_file_contents_coverage(parsed, file_contents):
+        print("\nFix missing file-contents entries before injecting.")
         sys.exit(1)
 
     check_hunk_coverage(review, parsed)
