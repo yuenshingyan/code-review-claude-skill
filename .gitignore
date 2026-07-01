@@ -17,3 +17,5 @@
 # Syntax highlighting
 vendor/github-dark.min.css
 vendor/highlight.min.js
+
+scratchpad/
