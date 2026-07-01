@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Add background-color styling to inline `<code>` references (file names, function/variable names) in WHY/HOW/WHEN/WHERE annotations, breaking-change details, and notes
+- Remove the WHERE annotation from review sections; blast-radius info is already covered by the `related` field
+- Add background-color styling to inline `<code>` references (file names, function/variable names) in WHY/HOW/WHEN annotations, breaking-change details, and notes
 
 ## 1.0.0 — 2026-06-23
 
