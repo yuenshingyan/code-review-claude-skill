@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix horizontal scroll position in diff panels snapping back during vertical scroll, scroll-sync, or click-to-trace re-renders, by giving each panel's content a stable width sized to its widest line instead of one derived from whichever lines the virtual scroller currently has rendered
 - Clarify SKILL.md guidance: a section spanning multiple hunks must list every hunk's `old_start` in `lines`, or the un-listed hunk renders unhighlighted in the diff panel
 - `build_review.py` now warns (non-fatal) about hunks not claimed by any section's `lines`, catching the case where a section's narrative covers a hunk it forgot to list
 - Remove the WHERE annotation from review sections; blast-radius info is already covered by the `related` field
