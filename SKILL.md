@@ -146,7 +146,10 @@ Write as much as needed to make each field genuinely useful to someone reading t
         "note": "<optional 'Also in this diff' note — omit if not needed>",
         "why": "<root cause or motivation — as much prose as needed>",
         "how": "<approach and key technical decisions — as much prose as needed>",
-        "when": "<runtime conditions that activate this path — as much prose as needed>"
+        "when": "<runtime conditions that activate this path — as much prose as needed>",
+        "identifiers": [
+          { "name": "<function/type/variable name>", "desc": "<one-line description>" }
+        ]
       }
     ]
   }
@@ -164,6 +167,7 @@ Write as much as needed to make each field genuinely useful to someone reading t
 - **`why`:** Mandatory. Derive motivation from commit messages, PR context, code comments, or reasoning. Never restate the "what."
 - **`how`:** Mandatory for non-trivial changes. Describe approach and tradeoffs, not syntax.
 - **`when`:** Mandatory for non-trivial changes. Name runtime conditions, user actions, data states.
+- **`identifiers`:** Optional array of `{ name, desc }` listing the key functions/types/variables introduced or meaningfully changed in this section, one line each. Helps a reviewer scan what symbols matter before reading the diff. Omit for trivial changes (renames, formatting, config tweaks) — same threshold as `how`/`when`.
 - **Rich text:** `breakingDetail`, `note`, `why`, `how`, `when` may contain `<code>`, `<strong>`, `<em>`, and `<br>`. No other HTML.
 - **Numbered lists:** When a field contains a numbered list (e.g. "1. … 2. … 3. …"), place a `<br>` before each item number so each item renders on its own line. Example: `"First sentence of context.<br>1. Point one.<br>2. Point two.<br>3. Point three."`
 
@@ -192,7 +196,11 @@ Write as much as needed to make each field genuinely useful to someone reading t
   "context": "This middleware intercepts every authenticated request and validates the JWT.",
   "why": "Users were getting logged out mid-session when their token expired during long form submissions.",
   "how": "Added a <code>RefreshConfig</code> parameter to <code>AuthMiddleware::new()</code> that enables transparent token refresh within a configurable grace period, avoiding forced re-authentication.",
-  "when": "Activates on every authenticated HTTP request when the JWT is expired but within the grace period. Affects all users with active sessions during token rotation."
+  "when": "Activates on every authenticated HTTP request when the JWT is expired but within the grace period. Affects all users with active sessions during token rotation.",
+  "identifiers": [
+    { "name": "RefreshConfig", "desc": "New struct holding the grace period and refresh-token lookup" },
+    { "name": "AuthMiddleware::new()", "desc": "Constructor, now requires a RefreshConfig argument" }
+  ]
 }
 ```
 
