@@ -265,8 +265,9 @@ The script resolves each section's absolute file path and starting line number, 
 
 - **NO ABS PATH** (blocks — exits 1) — the section's `lines` array is missing or the `file` path doesn't match any entry in `hunks.json`. Open `scratchpad/hunks.json`, find the correct file entry, and update `lines` with the right `old_start` (or `new_start` for new files) integer.
 - **ORPHANED HUNK** (non-blocking — exits 0) — a hunk that no section's `lines` array claims. This usually means a section's `why`/`how`/`when` narrates behavior spanning multiple hunks but only one hunk's start line was listed (see the `lines` field rule above). Add the missing `old_start`/`new_start` to the relevant section's `lines`.
+- **DUPLICATE HUNK** (non-blocking — exits 0) — the same hunk is listed in more than one section's `lines` array for the same file. This blends unrelated code into both sections' diff panels and exported snippets. Remove the hunk from whichever section it doesn't actually belong to; if two sections are genuinely connected, use the `related` field instead of sharing a hunk.
 
-Fix every violation in `scratchpad/review.json` and re-run — exit 0 alone is not sufficient, since ORPHANED HUNK warnings don't affect the exit code. Only proceed to Step 5 once the output has no NO ABS PATH errors and no ORPHANED HUNK warnings.
+Fix every violation in `scratchpad/review.json` and re-run — exit 0 alone is not sufficient, since ORPHANED HUNK and DUPLICATE HUNK warnings don't affect the exit code. Only proceed to Step 5 once the output has no NO ABS PATH errors, no ORPHANED HUNK warnings, and no DUPLICATE HUNK warnings.
 
 ## Step 5 — Report
 
