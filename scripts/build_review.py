@@ -51,6 +51,16 @@ def embed_diff_metadata(
         file_path: str = entry['file']
         hunk_index[file_path] = {h['old_start']: h for h in entry['hunks']}
 
+    # Hunks explicitly claimed by some section's `lines`, before any fallback
+    # mutation below. The pure-deletion fallback (below) must never borrow one
+    # of these — it would otherwise blend a hunk that belongs to a different,
+    # unrelated section into this one's diff panel and exported snippet.
+    explicit_claims: dict[str, set[int]] = {}
+    for entries in review['sections'].values():
+        for section in entries:
+            claimed = explicit_claims.setdefault(section['file'], set())
+            claimed.update(section.get('lines', []))
+
     repo_root = os.getcwd()
 
     for tab, entries in review['sections'].items():
@@ -73,15 +83,20 @@ def embed_diff_metadata(
                 if hunk:
                     section['startLine'] = hunk['old_start']
                     # If this hunk only deletes (no additions), also include the
-                    # next hunk so the After panel can show the replacement code.
+                    # next hunk so the After panel can show the replacement code —
+                    # but only if no other section already claims that hunk; a
+                    # deletion isn't always a refactor with replacement code, and
+                    # the next hunk in the file may just be an unrelated change.
                     has_additions = any(line['type'] == 'added' for line in hunk.get('after', []))
                     if not has_additions and hunk.get('before'):
                         sorted_starts = sorted(file_hunks)
                         idx = sorted_starts.index(anchor_ln)
                         if idx + 1 < len(sorted_starts):
                             next_start = sorted_starts[idx + 1]
-                            if next_start not in line_numbers:
+                            claimed = explicit_claims.setdefault(file_path, set())
+                            if next_start not in line_numbers and next_start not in claimed:
                                 section['lines'] = list(line_numbers) + [next_start]
+                                claimed.add(next_start)
             elif file_hunks:
                 # No lines specified — default to the first hunk
                 first_hunk = next(iter(file_hunks.values()))
@@ -170,6 +185,51 @@ def check_hunk_coverage(review: dict[str, Any], parsed: list[dict[str, Any]]) ->
     if orphaned:
         print(f"\n{orphaned} hunk(s) not covered by any section's `lines` (see warnings above).")
     return orphaned
+
+
+def check_hunk_duplication(review: dict[str, Any]) -> int:
+    """Warn about a hunk claimed by more than one section.
+
+    Cross-checks every section's ``lines`` array against every other
+    section's for the same file. A hunk listed in two different sections
+    means both sections' diff panels and exported snippets pull in each
+    other's code — one section's narrative ends up illustrated with
+    unrelated lines from the other. Per the ``lines`` field rule in
+    ``SKILL.md``, a hunk should belong to exactly one section; genuinely
+    connected sections should use the ``related`` field instead of
+    sharing a hunk.
+
+    Parameters
+    ----------
+    review : dict[str, Any]
+        Review JSON with sections already processed by
+        ``embed_diff_metadata``.
+
+    Returns
+    -------
+    int
+        Number of hunks claimed by more than one section. Non-blocking —
+        same convention as ``check_hunk_coverage``.
+    """
+    claims: dict[tuple[str, int], list[str]] = {}
+    for entries in review['sections'].values():
+        for section in entries:
+            file_path = section['file']
+            for line in set(section.get('lines', [])):
+                claims.setdefault((file_path, line), []).append(section['desc'])
+
+    duplicated = 0
+    for (file_path, line), descs in claims.items():
+        if len(descs) < 2:
+            continue
+        print(f"  DUPLICATE HUNK: {file_path} hunk at line={line} is claimed by "
+              f"{len(descs)} sections: {descs} — remove it from whichever section "
+              f"it doesn't belong to, or use `related` if the sections are genuinely "
+              f"connected.")
+        duplicated += 1
+    if duplicated:
+        print(f"\n{duplicated} hunk(s) claimed by more than one section (see warnings above).")
+    return duplicated
 
 
 def check_file_contents_coverage(
@@ -313,6 +373,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     check_hunk_coverage(review, parsed)
+    check_hunk_duplication(review)
 
     if not inject(review, parsed, file_contents, template_path, output_path):
         sys.exit(1)
