@@ -646,6 +646,16 @@ a.bc-path { text-decoration: none; }
   var rawFileContents = JSON.parse(document.getElementById('file-contents-data').textContent);
   var fileContentsByFile = {};
   rawFileContents.forEach(function(entry) { fileContentsByFile[entry.file] = entry; });
+  // Hunks explicitly claimed by some section's `lines`, used to stop the
+  // pure-deletion fallback (see buildDiffPanels/buildDiffSnippetMarkdown)
+  // from borrowing a hunk that belongs to a different, unrelated section.
+  var explicitLinesByFile = {};
+  for (var _clt in data.sections) {
+    data.sections[_clt].forEach(function(cs) {
+      var claims = explicitLinesByFile[cs.file] || (explicitLinesByFile[cs.file] = {});
+      (cs.lines || []).forEach(function(ln) { claims[ln] = true; });
+    });
+  }
   Object.keys(localStorage).forEach(function(k) {
     if (k.startsWith('code-review:')) localStorage.removeItem(k);
   });
@@ -857,12 +867,16 @@ a.bc-path { text-decoration: none; }
     });
     // If the selected hunks only contain deletions, the replacement additions are likely
     // in the immediately-following hunk (common in refactors). Include it so the After
-    // panel can show the new code with highlights.
+    // panel can show the new code with highlights — unless that hunk is already
+    // explicitly claimed by a different section, meaning it isn't actually related.
     if (relevantHunks.length > 0 && Object.keys(removedLines).length > 0 && Object.keys(addedLines).length === 0) {
       var lastOldStart = Math.max.apply(null, relevantHunks.map(function(h) { return h.old_start; }));
+      var claimedByOthers = explicitLinesByFile[s.file] || {};
       for (var _i = 0; _i < fileHunks.length; _i++) {
         if (fileHunks[_i].old_start > lastOldStart) {
-          (fileHunks[_i].after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
+          if (!claimedByOthers[fileHunks[_i].old_start]) {
+            (fileHunks[_i].after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
+          }
           break;
         }
       }
@@ -951,13 +965,17 @@ a.bc-path { text-decoration: none; }
       (h.after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
     });
     // Same pure-deletion fallback as buildDiffPanels: borrow the next hunk's
-    // additions so a refactor's replacement code isn't left out entirely.
+    // additions so a refactor's replacement code isn't left out entirely,
+    // unless that hunk is already explicitly claimed by a different section.
     if (Object.keys(removedLines).length > 0 && Object.keys(addedLines).length === 0) {
       var fileHunks = hunksByFile[s.file] || [];
       var lastOldStart = Math.max.apply(null, relevantHunks.map(function(h) { return h.old_start; }));
+      var claimedByOthers = explicitLinesByFile[s.file] || {};
       for (var i = 0; i < fileHunks.length; i++) {
         if (fileHunks[i].old_start > lastOldStart) {
-          (fileHunks[i].after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
+          if (!claimedByOthers[fileHunks[i].old_start]) {
+            (fileHunks[i].after || []).forEach(function(l) { if (l.type === 'added') addedLines[l.line] = true; });
+          }
           break;
         }
       }
